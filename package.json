@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "build:prod": "NITRO_PRESET=node-server vite build",
+    "assets:sync": "node scripts/localize-lovable-assets.mjs --sync",
+    "assets:verify": "node scripts/localize-lovable-assets.mjs --verify",
+    "assets:localize": "node scripts/localize-lovable-assets.mjs --rewrite-json",
+    "assets:restore": "node scripts/localize-lovable-assets.mjs --restore-json",
+    "build:prod": "sh -c 'npm run assets:localize && NITRO_PRESET=node-server vite build; status=$?; npm run assets:restore; exit $status'",
+    "build:prod:ci": "npm run assets:localize && NITRO_PRESET=node-server vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "start": "node .output/server/index.mjs",

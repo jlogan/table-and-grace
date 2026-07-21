@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "assets": {
+    "8c305058-500e-4929-a581-7f2223fa8435": {
+      "json": "src/assets/table-and-grace-logo.png.asset.json",
+      "file": "table-and-grace-logo.png",
+      "publicUrl": "/site-assets/table-and-grace-logo.png",
+      "size": 53179,
+      "sha256": "956d87d61e2304805c2adf3a8eb39ffe1a5a8ac7087e8942e147802b362c079b",
+      "createdAt": "2026-07-21T14:41:26Z"
+    },
+    "0334e0ea-ce03-47e9-9a79-3acb7d98a2ee": {
+      "json": "src/assets/table-and-grace-pattern.png.asset.json",
+      "file": "table-and-grace-pattern.png",
+      "publicUrl": "/site-assets/table-and-grace-pattern.png",
+      "size": 96436,
+      "sha256": "cfc403aa9aecc1ce57befb5853950afd75f359272d02f7f687ec64a885b6e431",
+      "createdAt": "2026-07-21T14:41:30Z"
+    }
+  }
+}
