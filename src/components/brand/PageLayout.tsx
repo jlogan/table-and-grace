@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, Phone } from "lucide-react";
+import { ChevronLeft, Phone, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "./Logo";
 import { NavMenu } from "./NavMenu";
@@ -36,7 +36,17 @@ export function PageLayout({
               <Logo size="sm" />
             </Link>
           )}
-          <NavMenu />
+          <div className="flex items-center gap-2">
+            <Link
+              to="/account"
+              aria-label="My Account"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-navy px-3 text-navy font-semibold"
+            >
+              <User className="size-5" aria-hidden />
+              <span className="hidden sm:inline text-sm">Account</span>
+            </Link>
+            <NavMenu />
+          </div>
         </div>
       </header>
 
