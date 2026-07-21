@@ -1,15 +1,27 @@
-export function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  const scale = size === "sm" ? "text-xl" : size === "lg" ? "text-5xl" : "text-3xl";
+import logoAsset from "@/assets/table-and-grace-logo.png.asset.json";
+
+export function Logo({
+  size = "md",
+  showTagline = true,
+}: {
+  size?: "sm" | "md" | "lg";
+  showTagline?: boolean;
+}) {
+  const heightClass =
+    size === "sm" ? "h-8" : size === "lg" ? "h-24 sm:h-28" : "h-14";
+
   return (
     <div className="flex flex-col items-center leading-none">
-      <span className="text-[0.65rem] font-semibold tracking-[0.2em] text-gold uppercase">
-        Chef Margaux presents
-      </span>
-      <span className={`font-display italic font-semibold text-navy ${scale}`}>
-        table <span className="text-gold not-italic text-[0.55em] align-middle mx-0.5">✤</span>
-        <span className="not-italic text-[0.5em] align-middle tracking-widest">AND</span>
-        <span className="text-gold not-italic text-[0.55em] align-middle mx-0.5">✤</span> grace
-      </span>
+      {showTagline && (
+        <span className="text-[0.65rem] font-semibold tracking-[0.2em] text-gold uppercase mb-2">
+          Chef Margaux presents
+        </span>
+      )}
+      <img
+        src={logoAsset.url}
+        alt="Table and Grace"
+        className={`${heightClass} w-auto`}
+      />
     </div>
   );
 }
