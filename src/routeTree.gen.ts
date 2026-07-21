@@ -9,38 +9,227 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as ReviewRouteImport } from './routes/review'
+import { Route as PlansRouteImport } from './routes/plans'
+import { Route as PickupRouteImport } from './routes/pickup'
+import { Route as HelpMeChooseRouteImport } from './routes/help-me-choose'
+import { Route as ConfirmationRouteImport } from './routes/confirmation'
+import { Route as CartRouteImport } from './routes/cart'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PlansCategoryIdRouteImport } from './routes/plans.$categoryId'
+import { Route as FeedbackOrderIdRouteImport } from './routes/feedback.$orderId'
 
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReviewRoute = ReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlansRoute = PlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PickupRoute = PickupRouteImport.update({
+  id: '/pickup',
+  path: '/pickup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpMeChooseRoute = HelpMeChooseRouteImport.update({
+  id: '/help-me-choose',
+  path: '/help-me-choose',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfirmationRoute = ConfirmationRouteImport.update({
+  id: '/confirmation',
+  path: '/confirmation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CartRoute = CartRouteImport.update({
+  id: '/cart',
+  path: '/cart',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlansCategoryIdRoute = PlansCategoryIdRouteImport.update({
+  id: '/$categoryId',
+  path: '/$categoryId',
+  getParentRoute: () => PlansRoute,
+} as any)
+const FeedbackOrderIdRoute = FeedbackOrderIdRouteImport.update({
+  id: '/feedback/$orderId',
+  path: '/feedback/$orderId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/cart': typeof CartRoute
+  '/confirmation': typeof ConfirmationRoute
+  '/help-me-choose': typeof HelpMeChooseRoute
+  '/pickup': typeof PickupRoute
+  '/plans': typeof PlansRouteWithChildren
+  '/review': typeof ReviewRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/feedback/$orderId': typeof FeedbackOrderIdRoute
+  '/plans/$categoryId': typeof PlansCategoryIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/cart': typeof CartRoute
+  '/confirmation': typeof ConfirmationRoute
+  '/help-me-choose': typeof HelpMeChooseRoute
+  '/pickup': typeof PickupRoute
+  '/plans': typeof PlansRouteWithChildren
+  '/review': typeof ReviewRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/feedback/$orderId': typeof FeedbackOrderIdRoute
+  '/plans/$categoryId': typeof PlansCategoryIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/cart': typeof CartRoute
+  '/confirmation': typeof ConfirmationRoute
+  '/help-me-choose': typeof HelpMeChooseRoute
+  '/pickup': typeof PickupRoute
+  '/plans': typeof PlansRouteWithChildren
+  '/review': typeof ReviewRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/feedback/$orderId': typeof FeedbackOrderIdRoute
+  '/plans/$categoryId': typeof PlansCategoryIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/account'
+    | '/cart'
+    | '/confirmation'
+    | '/help-me-choose'
+    | '/pickup'
+    | '/plans'
+    | '/review'
+    | '/sitemap.xml'
+    | '/feedback/$orderId'
+    | '/plans/$categoryId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/account'
+    | '/cart'
+    | '/confirmation'
+    | '/help-me-choose'
+    | '/pickup'
+    | '/plans'
+    | '/review'
+    | '/sitemap.xml'
+    | '/feedback/$orderId'
+    | '/plans/$categoryId'
+  id:
+    | '__root__'
+    | '/'
+    | '/account'
+    | '/cart'
+    | '/confirmation'
+    | '/help-me-choose'
+    | '/pickup'
+    | '/plans'
+    | '/review'
+    | '/sitemap.xml'
+    | '/feedback/$orderId'
+    | '/plans/$categoryId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
+  CartRoute: typeof CartRoute
+  ConfirmationRoute: typeof ConfirmationRoute
+  HelpMeChooseRoute: typeof HelpMeChooseRoute
+  PickupRoute: typeof PickupRoute
+  PlansRoute: typeof PlansRouteWithChildren
+  ReviewRoute: typeof ReviewRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  FeedbackOrderIdRoute: typeof FeedbackOrderIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/review': {
+      id: '/review'
+      path: '/review'
+      fullPath: '/review'
+      preLoaderRoute: typeof ReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/plans': {
+      id: '/plans'
+      path: '/plans'
+      fullPath: '/plans'
+      preLoaderRoute: typeof PlansRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pickup': {
+      id: '/pickup'
+      path: '/pickup'
+      fullPath: '/pickup'
+      preLoaderRoute: typeof PickupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help-me-choose': {
+      id: '/help-me-choose'
+      path: '/help-me-choose'
+      fullPath: '/help-me-choose'
+      preLoaderRoute: typeof HelpMeChooseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/confirmation': {
+      id: '/confirmation'
+      path: '/confirmation'
+      fullPath: '/confirmation'
+      preLoaderRoute: typeof ConfirmationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cart': {
+      id: '/cart'
+      path: '/cart'
+      fullPath: '/cart'
+      preLoaderRoute: typeof CartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +237,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/plans/$categoryId': {
+      id: '/plans/$categoryId'
+      path: '/$categoryId'
+      fullPath: '/plans/$categoryId'
+      preLoaderRoute: typeof PlansCategoryIdRouteImport
+      parentRoute: typeof PlansRoute
+    }
+    '/feedback/$orderId': {
+      id: '/feedback/$orderId'
+      path: '/feedback/$orderId'
+      fullPath: '/feedback/$orderId'
+      preLoaderRoute: typeof FeedbackOrderIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface PlansRouteChildren {
+  PlansCategoryIdRoute: typeof PlansCategoryIdRoute
+}
+
+const PlansRouteChildren: PlansRouteChildren = {
+  PlansCategoryIdRoute: PlansCategoryIdRoute,
+}
+
+const PlansRouteWithChildren = PlansRoute._addFileChildren(PlansRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
+  CartRoute: CartRoute,
+  ConfirmationRoute: ConfirmationRoute,
+  HelpMeChooseRoute: HelpMeChooseRoute,
+  PickupRoute: PickupRoute,
+  PlansRoute: PlansRouteWithChildren,
+  ReviewRoute: ReviewRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
+  FeedbackOrderIdRoute: FeedbackOrderIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
