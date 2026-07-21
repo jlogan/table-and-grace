@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PageLayout } from "@/components/brand/PageLayout";
 import { BigLink } from "@/components/brand/BigButton";
 import { Heart, Utensils, Users } from "lucide-react";
+import chefMargauxImg from "@/assets/chef-margaux.jpg";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
