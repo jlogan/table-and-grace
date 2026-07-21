@@ -1,28 +1,20 @@
 #!/usr/bin/env node
 /**
- * Localize Lovable *.asset.json platform URLs for self-hosted production builds.
+ * Localize external *.asset.json platform URLs for self-hosted production builds.
  *
- * Lovable commits src/assets/*.asset.json with /__l5e/assets-v1/ URLs. This script
- * keeps those files as Lovable-owned metadata in git while serving repo-owned
+ * Some builder exports commit src/assets/*.asset.json with /__l5e/assets-v1/ URLs. This script
+ * keeps those files as source metadata in git while serving repo-owned
  * binaries from public/site-assets/ at build time.
  *
  * Modes:
- *   --sync         Download/update binaries + manifest (run after Lovable asset changes)
+ *   --sync         Download/update binaries + manifest (run after external asset changes)
  *   --verify       Fail if binaries or manifest are stale vs src/assets/*.asset.json
  *   --rewrite-json Temporarily rewrite asset JSON urls for build (working tree only)
  *   --restore-json Restore asset JSON from backup or git
  */
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  copyFile,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,19 +22,11 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SRC_DIR = join(ROOT, "src");
 const SITE_ASSETS_DIR = join(ROOT, "public", "site-assets");
 const MANIFEST_PATH = join(SITE_ASSETS_DIR, ".asset-manifest.json");
-const BACKUP_DIR = join(ROOT, "src", "assets", ".lovable-backup");
+const BACKUP_DIR = join(ROOT, "src", "assets", ".asset-backup");
 const PLATFORM_URL = /^\/__l5e\/assets-v1\//;
 const LOCAL_URL_PREFIX = "/site-assets";
 
-const ORIGINS = [
-  ...new Set(
-    [
-      process.env.LOVABLE_ASSET_ORIGIN,
-      "https://lovable.dev",
-      "https://id-preview--1b1c194e-cef6-4a15-96ce-ad1ced3feb1a.lovable.app",
-    ].filter(Boolean),
-  ),
-];
+const ORIGINS = [...new Set([process.env.EXTERNAL_ASSET_ORIGIN].filter(Boolean))];
 
 const flags = {
   sync: process.argv.includes("--sync"),
@@ -51,14 +35,9 @@ const flags = {
   restoreJson: process.argv.includes("--restore-json"),
 };
 
-if (
-  !flags.sync &&
-  !flags.verify &&
-  !flags.rewriteJson &&
-  !flags.restoreJson
-) {
+if (!flags.sync && !flags.verify && !flags.rewriteJson && !flags.restoreJson) {
   console.error(
-    "Usage: node scripts/localize-lovable-assets.mjs (--sync | --verify | --rewrite-json | --restore-json)",
+    "Usage: node scripts/localize-external-assets.mjs (--sync | --verify | --rewrite-json | --restore-json)",
   );
   process.exit(1);
 }
@@ -78,7 +57,7 @@ async function findAssetJsonFiles(dir) {
   async function walk(current) {
     const entries = await readdir(current, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.name === ".lovable-backup") continue;
+      if (entry.name === ".asset-backup") continue;
       const fullPath = join(current, entry.name);
       if (entry.isDirectory()) {
         await walk(fullPath);
@@ -187,7 +166,7 @@ async function syncAssets(records) {
 
   const localized = records.filter((record) => record.needsLocalization);
   if (localized.length === 0) {
-    info("No Lovable platform asset JSON files found to sync.");
+    info("No external platform asset JSON files found to sync.");
     return;
   }
 
@@ -224,7 +203,7 @@ async function syncAssets(records) {
     const result = await downloadAsset(meta, localPath);
     if (!result.ok) {
       fail(
-        `Failed to download ${fileName} from Lovable origins (${ORIGINS.join(", ")}): ${result.error}`,
+        `Failed to download ${fileName} from external origins (${ORIGINS.join(", ")}): ${result.error}`,
       );
     }
 
@@ -245,7 +224,7 @@ async function syncAssets(records) {
 async function verifyAssets(records) {
   const localized = records.filter((record) => record.needsLocalization);
   if (localized.length === 0) {
-    info("No Lovable platform asset JSON files require localization.");
+    info("No external platform asset JSON files require localization.");
     return;
   }
 
@@ -278,15 +257,11 @@ async function verifyAssets(records) {
     const entry = manifest.assets?.[assetId];
 
     if (!entry) {
-      fail(
-        `Manifest missing asset_id ${assetId} for ${relJson}. Run: npm run assets:sync`,
-      );
+      fail(`Manifest missing asset_id ${assetId} for ${relJson}. Run: npm run assets:sync`);
     }
 
     if (entry.file !== fileName) {
-      fail(
-        `Manifest file mismatch for ${assetId}: expected ${fileName}, got ${entry.file}`,
-      );
+      fail(`Manifest file mismatch for ${assetId}: expected ${fileName}, got ${entry.file}`);
     }
 
     if (entry.publicUrl !== publicUrl) {
@@ -296,15 +271,11 @@ async function verifyAssets(records) {
     }
 
     if (entry.size != null && entry.size !== meta.size) {
-      fail(
-        `Manifest size mismatch for ${assetId}: expected ${meta.size}, got ${entry.size}`,
-      );
+      fail(`Manifest size mismatch for ${assetId}: expected ${meta.size}, got ${entry.size}`);
     }
 
     if (entry.sha256 && entry.sha256 !== fileSha256) {
-      fail(
-        `${fileName} sha256 does not match manifest for ${assetId}. Run: npm run assets:sync`,
-      );
+      fail(`${fileName} sha256 does not match manifest for ${assetId}. Run: npm run assets:sync`);
     }
 
     info(`OK ${relJson} -> ${publicUrl}`);
@@ -352,11 +323,8 @@ async function restoreAssetJson(records) {
       });
       info("Restored src/assets/*.asset.json from git");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "git restore failed";
-      fail(
-        `Could not restore asset JSON files from backup or git: ${message}`,
-      );
+      const message = error instanceof Error ? error.message : "git restore failed";
+      fail(`Could not restore asset JSON files from backup or git: ${message}`);
     }
   }
 

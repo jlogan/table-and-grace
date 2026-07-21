@@ -16,8 +16,8 @@ dist-ssr
 .nitro
 *.local
 
-# Ephemeral Lovable asset JSON backups during local build:prod
-src/assets/.lovable-backup/
+# Ephemeral asset JSON backups during local build:prod
+src/assets/.asset-backup/
 
 # Wrangler / Cloudflare
 .wrangler/

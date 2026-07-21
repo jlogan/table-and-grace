@@ -9,7 +9,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { reportRuntimeError } from "../lib/runtime-error-reporting";
 import { OrderProvider } from "../lib/order-store";
 import { Link } from "@tanstack/react-router";
 
@@ -19,9 +19,7 @@ function NotFoundComponent() {
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-display text-navy">404</h1>
         <h2 className="mt-4 text-2xl font-display">Page not found</h2>
-        <p className="mt-3 text-base text-muted-foreground">
-          Let's get you back to the kitchen.
-        </p>
+        <p className="mt-3 text-base text-muted-foreground">Let's get you back to the kitchen.</p>
         <div className="mt-6">
           <Link
             to="/"
@@ -38,7 +36,7 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportRuntimeError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (
@@ -88,11 +86,33 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "Good cookin' is love you can taste. Order fresh heat & eat meals for pickup.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://tag.ourstagingserver.com/" },
+      { property: "og:image", content: "https://tag.ourstagingserver.com/og-image.png" },
+      { property: "og:image:type", content: "image/png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      {
+        property: "og:image:alt",
+        content: "Table and Grace fresh pickup meals advertisement with Chef Margaux.",
+      },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Table and Grace — Fresh Pickup Meals" },
+      {
+        name: "twitter:description",
+        content: "Good cookin' is love you can taste. Order fresh heat & eat meals for pickup.",
+      },
+      { name: "twitter:image", content: "https://tag.ourstagingserver.com/og-image.png" },
+      {
+        name: "twitter:image:alt",
+        content: "Table and Grace fresh pickup meals advertisement with Chef Margaux.",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "canonical", href: "https://tag.ourstagingserver.com/" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
