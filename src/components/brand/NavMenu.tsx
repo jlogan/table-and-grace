@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Menu, ShoppingBag, Phone, User, Utensils, MapPin, Info, HelpCircle, Mail, Sparkles } from "lucide-react";
+import { Menu, ShoppingBag, Phone, User, Utensils, Info, HelpCircle, Mail, Sparkles } from "lucide-react";
 import { useState } from "react";
 import {
   Sheet,
@@ -14,7 +14,6 @@ const links: { to: string; label: string; icon: React.ReactNode }[] = [
   { to: "/plans", label: "Our Meals", icon: <Utensils className="size-5" /> },
   { to: "/help-me-choose", label: "Help Me Choose", icon: <Sparkles className="size-5" /> },
   { to: "/about", label: "About Chef Margaux", icon: <Info className="size-5" /> },
-  { to: "/locations", label: "Pickup Locations", icon: <MapPin className="size-5" /> },
   { to: "/faq", label: "FAQ", icon: <HelpCircle className="size-5" /> },
   { to: "/contact", label: "Contact", icon: <Mail className="size-5" /> },
   { to: "/account", label: "My Account", icon: <User className="size-5" /> },
