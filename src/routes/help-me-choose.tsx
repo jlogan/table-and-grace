@@ -13,7 +13,7 @@ export const Route = createFileRoute("/help-me-choose")({
       { name: "description", content: "Tell us your goals and we'll suggest a plan." },
     ],
   }),
-  component: HelpMeChoose;
+  component: HelpMeChoose,
 });
 
 function HelpMeChoose() {
