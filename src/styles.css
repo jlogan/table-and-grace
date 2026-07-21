@@ -2,6 +2,14 @@
 @source "../src";
 @import "tw-animate-css";
 
+:root {
+  color-scheme: light;
+}
+
+html {
+  color-scheme: light;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /*
