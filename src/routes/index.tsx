@@ -25,36 +25,34 @@ function Home() {
       <PatternPanel
         size={130}
         opacity={0.85}
-        className="rounded-3xl -mx-2 px-2 py-8"
+        className="mx-[calc(50%-50vw)] w-screen px-4 py-10"
       >
-        <section className="text-center py-6">
+        <section className="mx-auto max-w-lg text-center">
           <div className="mb-6 flex justify-center">
             <Logo size="lg" />
           </div>
 
-          <div className="mx-auto max-w-lg">
-            <p className="inline-block rounded-full bg-gold-soft px-4 py-1 text-sm font-semibold text-navy mb-4">
-              Fresh pickup · Heat &amp; eat
-            </p>
-            <h1 className="text-4xl sm:text-5xl font-display font-semibold text-navy leading-tight">
-              Fresh pickup meals,
-              <br />
-              <span className="italic">made with love.</span>
-            </h1>
-            <p className="mt-5 text-lg text-navy/85">
-              Chef Margaux cooks small-batch prepared meals for easy pickup. Order ahead, heat when
-              you're ready, and enjoy real food that tastes like home.
-            </p>
+          <p className="inline-block rounded-full bg-gold-soft px-4 py-1 text-sm font-semibold text-navy mb-4">
+            Fresh pickup · Heat &amp; eat
+          </p>
+          <h1 className="text-4xl sm:text-5xl font-display font-semibold text-navy leading-tight">
+            Fresh pickup meals,
+            <br />
+            <span className="italic">made with love.</span>
+          </h1>
+          <p className="mt-5 text-lg text-navy/85">
+            Chef Margaux cooks small-batch prepared meals for easy pickup. Order ahead, heat when
+            you're ready, and enjoy real food that tastes like home.
+          </p>
 
-            <div className="mt-8 space-y-3">
-              <BigLink to="/plans" variant="primary">
-                Start my meal order
-              </BigLink>
-              <BigLink to="/help-me-choose" variant="ghost">
-                <Sparkles className="size-5" aria-hidden />
-                Help me choose a plan
-              </BigLink>
-            </div>
+          <div className="mt-8 space-y-3">
+            <BigLink to="/plans" variant="primary">
+              Start my meal order
+            </BigLink>
+            <BigLink to="/help-me-choose" variant="ghost">
+              <Sparkles className="size-5" aria-hidden />
+              Help me choose a plan
+            </BigLink>
           </div>
         </section>
       </PatternPanel>
