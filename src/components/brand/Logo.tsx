@@ -1,9 +1,7 @@
-import logoAsset from "@/assets/table-and-grace-logo.png.asset.json";
-
 const sizeMap = {
-  sm: "h-8",
-  md: "h-12",
-  lg: "h-20 sm:h-24",
+  sm: "text-xl sm:text-2xl",
+  md: "text-3xl",
+  lg: "text-5xl sm:text-6xl",
 } as const;
 
 export function Logo({
@@ -20,11 +18,9 @@ export function Logo({
           Chef Margaux presents
         </span>
       )}
-      <img
-        src={logoAsset.url}
-        alt="Table and Grace"
-        className={`${sizeMap[size]} w-auto`}
-      />
+      <p className={`font-display font-semibold tracking-tight text-navy ${sizeMap[size]}`}>
+        Table <span className="text-gold italic font-normal">and</span> Grace
+      </p>
     </div>
   );
 }
