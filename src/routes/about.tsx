@@ -42,6 +42,22 @@ function AboutPage() {
           </p>
         </header>
 
+        <figure className="relative mx-auto max-w-md">
+          <div className="absolute -inset-2 rounded-[2rem] bg-gold-soft/70 -z-10" aria-hidden />
+          <img
+            src={chefMargauxImg}
+            alt="Chef Margaux smiling, wearing her navy Table and Grace chef's coat"
+            width={1024}
+            height={1024}
+            loading="lazy"
+            className="w-full h-auto rounded-3xl border-2 border-cream-deep shadow-sm object-cover"
+          />
+          <figcaption className="mt-3 text-center text-sm text-navy/70 font-display italic">
+            Chef Margaux in the kitchen
+          </figcaption>
+        </figure>
+
+
         <section className="rounded-3xl bg-card border-2 border-cream-deep p-6 space-y-4">
           <p className="text-base leading-relaxed text-navy/90">
             Table and Grace started in a home kitchen with a simple idea: neighbors
