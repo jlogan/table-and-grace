@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageLayout } from "@/components/brand/PageLayout";
 import { BigLink } from "@/components/brand/BigButton";
 import { Logo } from "@/components/brand/Logo";
+import { PatternPanel } from "@/components/brand/PatternPanel";
 import { Utensils, Clock, Flame, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/")({
