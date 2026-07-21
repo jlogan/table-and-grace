@@ -1,13 +1,15 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, Phone, User } from "lucide-react";
+import { ChevronLeft, Phone } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "./Logo";
+import { NavMenu } from "./NavMenu";
 
 interface PageLayoutProps {
   children: ReactNode;
   showBack?: boolean;
   backTo?: string;
   backLabel?: string;
+  /** Kept for backwards-compat; menu now always shows on the right. */
   showAccount?: boolean;
 }
 
@@ -16,7 +18,6 @@ export function PageLayout({
   showBack,
   backTo = "/",
   backLabel = "Back",
-  showAccount = true,
 }: PageLayoutProps) {
   return (
     <div className="min-h-dvh bg-background flex flex-col">
@@ -35,15 +36,7 @@ export function PageLayout({
               <Logo size="sm" />
             </Link>
           )}
-          {showAccount && (
-            <Link
-              to="/account"
-              aria-label="My account"
-              className="inline-flex size-11 items-center justify-center rounded-full border-2 border-navy text-navy"
-            >
-              <User className="size-5" />
-            </Link>
-          )}
+          <NavMenu />
         </div>
       </header>
 
