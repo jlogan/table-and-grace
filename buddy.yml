@@ -36,8 +36,8 @@
       docker_image_tag: "22"
       shell: "BASH"
       execute_commands:
-        - "rm -rf node_modules"
-        - "npm install"
+        - "rm -rf node_modules package-lock.json"
+        - "npm install --no-package-lock"
         - "npm run build:prod"
         - 'test -f .output/server/index.mjs && test -d .output/public/assets || { echo "ERROR: expected .output/server/index.mjs and .output/public/assets after build"; exit 1; }'
         - 'if grep -R "__l5e/assets-v1" .output src --exclude="*.asset.json" 2>/dev/null; then echo "ERROR: Lovable platform asset URL leaked into build"; exit 1; fi'
