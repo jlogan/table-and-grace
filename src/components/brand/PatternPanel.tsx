@@ -1,4 +1,5 @@
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
+import patternAsset from "@/assets/table-and-grace-pattern.png.asset.json";
 
 interface PatternPanelProps extends HTMLAttributes<HTMLDivElement> {
   children?: ReactNode;
@@ -9,29 +10,21 @@ interface PatternPanelProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * Cream panel with a subtle repeating gold floral-inspired tile.
- * Rendered with CSS gradients — no image assets.
+ * Cream panel with the brand's floral tile from the brand kit
+ * as a repeating background.
  */
 export function PatternPanel({
   children,
-  size = 140,
+  size = 180,
   opacity = 0.9,
   className = "",
   style,
   ...rest
 }: PatternPanelProps) {
-  const tile = `${size}px ${size}px`;
   const bg: CSSProperties = {
     backgroundColor: "var(--cream)",
-    backgroundImage: [
-      "radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--gold-soft) 14%, transparent) 0, transparent 55%)",
-      "radial-gradient(circle at 18% 22%, color-mix(in srgb, var(--gold) 16%, transparent) 2px, transparent 2px)",
-      "radial-gradient(circle at 82% 28%, color-mix(in srgb, var(--gold) 12%, transparent) 1.5px, transparent 1.5px)",
-      "radial-gradient(circle at 72% 78%, color-mix(in srgb, var(--gold-soft) 14%, transparent) 2.5px, transparent 2.5px)",
-      "radial-gradient(circle at 28% 76%, color-mix(in srgb, var(--gold) 10%, transparent) 1.5px, transparent 1.5px)",
-      "radial-gradient(circle at 50% 8%, color-mix(in srgb, var(--gold-soft) 10%, transparent) 3px, transparent 3px)",
-    ].join(", "),
-    backgroundSize: tile,
+    backgroundImage: `url("${patternAsset.url}")`,
+    backgroundSize: `${size}px ${size}px`,
     backgroundRepeat: "repeat",
     opacity,
   };
