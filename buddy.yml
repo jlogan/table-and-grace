@@ -1,7 +1,7 @@
 # Buddy.works pipeline-as-code — https://buddy.works/docs/yaml
 #
 # Table and Grace staging deploy (tag.ourstagingserver.com)
-# - pushes to `main` build the TanStack Start/Nitro node-server app in CI, transfer
+# - pushes to `staging` build the TanStack Start/Nitro node-server app in CI, transfer
 #   the repo payload plus `.output/` to CloudPanel staging over SFTP/SSH, then restart
 #   the PM2-managed Node process under the CloudPanel site user.
 #
@@ -27,7 +27,7 @@
   events:
     - type: PUSH
       refs:
-        - refs/heads/main
+        - refs/heads/staging
   terminate_stale_runs: true
   actions:
     - action: "Build app"
