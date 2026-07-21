@@ -29,7 +29,7 @@ function Home() {
       >
         <section className="mx-auto max-w-lg text-center">
           <div className="mb-6 flex justify-center">
-            <Logo size="lg" />
+            <Logo size="lg" showTagline />
           </div>
 
           <p className="inline-block rounded-full bg-gold-soft px-4 py-1 text-sm font-semibold text-navy mb-4">
