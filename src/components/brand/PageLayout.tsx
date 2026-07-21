@@ -65,9 +65,6 @@ export function HelpFooter() {
           Call (770) 285-3600
         </a>
       </div>
-      <div className="mx-auto max-w-2xl px-4 pb-5 text-xs text-muted-foreground italic font-display">
-        good cookin' is love you can taste
-      </div>
     </footer>
   );
 }
