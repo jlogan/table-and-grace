@@ -1,0 +1,156 @@
+# Buddy.works pipeline-as-code — https://buddy.works/docs/yaml
+#
+# Table and Grace staging deploy (tag.ourstagingserver.com)
+# - pushes to `main` build the TanStack Start/Nitro node-server app in CI, transfer
+#   the repo payload plus `.output/` to CloudPanel staging over SFTP/SSH, then restart
+#   the PM2-managed Node process under the CloudPanel site user.
+#
+# Runtime model:
+#   PM2 process `$STAGING_PM2_NAME` runs Node from `.output/server`:
+#     node index.mjs (NODE_ENV=production, HOST/NITRO_HOST=127.0.0.1, PORT/NITRO_PORT=$STAGING_APP_PORT)
+#   nginx reverse-proxies the domain to that local port.
+#
+# One-time Buddy project setup:
+#   1. Switch the Buddy project to YAML configuration so it reads this root file.
+#   2. Ensure BA Buddy workspace-global variables are set:
+#        CYPHER_HOST       CloudPanel staging server host/IP
+#        BROBOT_BA         deploy SSH key asset in Variables, Keys & Assets
+#   3. Add these encrypted project variables:
+#        STAGING_SSH_USER    CloudPanel site user
+#        STAGING_DEPLOY_PATH site docroot, e.g. /home/<siteuser>/htdocs/tag.ourstagingserver.com
+#        STAGING_PM2_NAME    PM2 process name for this site
+#        STAGING_APP_PORT    local app port Node listens on
+#        STAGING_SITE_URL    public staging URL to health-check (e.g. https://tag.ourstagingserver.com)
+
+- pipeline: "Deploy To Staging"
+  name: "Deploy To Staging"
+  events:
+    - type: PUSH
+      refs:
+        - refs/heads/main
+  terminate_stale_runs: true
+  actions:
+    - action: "Build app"
+      type: "BUILD"
+      docker_image_name: "node"
+      docker_image_tag: "22"
+      shell: "BASH"
+      execute_commands:
+        - "npm install"
+        - "npm run build:prod"
+        - 'test -f .output/server/index.mjs && test -d .output/public/assets || { echo "ERROR: expected .output/server/index.mjs and .output/public/assets after build"; exit 1; }'
+        - 'if grep -R "__l5e/assets-v1" .output src --exclude="*.asset.json" 2>/dev/null; then echo "ERROR: Lovable platform asset URL leaked into build"; exit 1; fi'
+
+    - action: "Transfer to staging (SFTP)"
+      type: "TRANSFER"
+      input_type: "BUILD_ARTIFACTS"
+      local_path: "/"
+      remote_path: "$STAGING_DEPLOY_PATH"
+      use_temporary_files: true
+      deletion_disabled: true
+      deployment_excludes:
+        - ".git/**"
+        - "node_modules/**"
+        - ".env"
+        - ".env.*"
+        - ".wrangler/**"
+        - "logs/**"
+        - "*.log"
+      targets:
+        - target: "staging-cloudpanel"
+          type: "SSH"
+          name: "CloudPanel Staging"
+          host: "$CYPHER_HOST"
+          port: "22"
+          path: "$STAGING_DEPLOY_PATH"
+          auth:
+            method: "ASSETS_KEY"
+            username: "$STAGING_SSH_USER"
+            asset: "BROBOT_BA"
+
+    - action: "Restart staging app"
+      type: "SSH_COMMAND"
+      shell: "BASH"
+      run_as_script: true
+      working_directory: "$STAGING_DEPLOY_PATH"
+      commands: |-
+        set -euo pipefail
+        cd "$STAGING_DEPLOY_PATH"
+
+        test -f .output/server/index.mjs || { echo "ERROR: .output/server/index.mjs missing"; exit 1; }
+
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+        nvm use 22 >/dev/null 2>&1 || nvm use default >/dev/null 2>&1 || true
+        command -v node >/dev/null 2>&1 || export PATH="$(ls -d "$NVM_DIR"/versions/node/*/bin 2>/dev/null | sort -V | tail -1):$PATH"
+        echo "node: $(node -v)"
+        echo "npm: $(npm -v)"
+
+        npm install
+
+        PM2_NAME="$STAGING_PM2_NAME"
+        PORT="$STAGING_APP_PORT"
+        PUBLIC_URL="$STAGING_SITE_URL"
+
+        # Free the listen port and remove stale PM2/Node processes before restart.
+        if command -v fuser >/dev/null 2>&1; then
+          fuser -k "${PORT}/tcp" 2>/dev/null || true
+        else
+          PIDS="$(lsof -t -iTCP:"${PORT}" -sTCP:LISTEN 2>/dev/null || true)"
+          if [ -n "$PIDS" ]; then
+            kill -9 $PIDS 2>/dev/null || true
+          fi
+        fi
+        pm2 delete "$PM2_NAME" 2>/dev/null || true
+        pm2 jlist 2>/dev/null | node -e "
+          const port = process.argv[1];
+          const keepName = process.argv[2];
+          let procs = [];
+          try { procs = JSON.parse(require('fs').readFileSync(0, 'utf8') || '[]'); } catch {}
+          for (const p of procs) {
+            const execPath = String(p.pm2_env?.pm_exec_path || '');
+            const isNodeServer = /index\\.mjs$/.test(execPath);
+            const envPort = String(p.pm2_env?.env?.PORT || p.pm2_env?.env?.NITRO_PORT || '');
+            const matchesPort = envPort === port;
+            if (p.name === keepName || (isNodeServer && matchesPort)) {
+              require('child_process').execSync('pm2 delete ' + p.pm_id, { stdio: 'inherit' });
+            }
+          }
+        " "$PORT" "$PM2_NAME" || true
+
+        export NODE_ENV=production
+        export HOST=127.0.0.1
+        export PORT="$STAGING_APP_PORT"
+        export NITRO_HOST=127.0.0.1
+        export NITRO_PORT="$STAGING_APP_PORT"
+
+        pm2 start index.mjs --name "$PM2_NAME" --cwd "$STAGING_DEPLOY_PATH/.output/server" --update-env
+        pm2 save || true
+
+        for i in $(seq 1 30); do
+          if curl -fsS -I --connect-timeout 2 --max-time 5 "http://127.0.0.1:${PORT}/" >/dev/null; then
+            echo "Local health check passed after ${i}s"
+            if [ -n "${PUBLIC_URL:-}" ]; then
+              curl -fsSI --connect-timeout 5 --max-time 15 "$PUBLIC_URL/" >/dev/null
+              echo "Public health check passed: $PUBLIC_URL/"
+            fi
+            exit 0
+          fi
+          sleep 1
+        done
+
+        echo "Health check failed on port ${PORT}"
+        pm2 status "$PM2_NAME" --no-color || true
+        pm2 logs "$PM2_NAME" --lines 80 --nostream --no-color || true
+        exit 1
+      targets:
+        - target: "staging-cloudpanel"
+          type: "SSH"
+          name: "CloudPanel Staging"
+          host: "$CYPHER_HOST"
+          port: "22"
+          path: "$STAGING_DEPLOY_PATH"
+          auth:
+            method: "ASSETS_KEY"
+            username: "$STAGING_SSH_USER"
+            asset: "BROBOT_BA"
