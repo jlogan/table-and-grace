@@ -13,7 +13,10 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as PlansRouteImport } from './routes/plans'
 import { Route as PickupRouteImport } from './routes/pickup'
+import { Route as LocationsRouteImport } from './routes/locations'
 import { Route as HelpMeChooseRouteImport } from './routes/help-me-choose'
+import { Route as FaqRouteImport } from './routes/faq'
+import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ConfirmationRouteImport } from './routes/confirmation'
 import { Route as CartRouteImport } from './routes/cart'
 import { Route as AccountRouteImport } from './routes/account'
@@ -42,9 +45,24 @@ const PickupRoute = PickupRouteImport.update({
   path: '/pickup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LocationsRoute = LocationsRouteImport.update({
+  id: '/locations',
+  path: '/locations',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HelpMeChooseRoute = HelpMeChooseRouteImport.update({
   id: '/help-me-choose',
   path: '/help-me-choose',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FaqRoute = FaqRouteImport.update({
+  id: '/faq',
+  path: '/faq',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConfirmationRoute = ConfirmationRouteImport.update({
@@ -89,7 +107,10 @@ export interface FileRoutesByFullPath {
   '/account': typeof AccountRoute
   '/cart': typeof CartRoute
   '/confirmation': typeof ConfirmationRoute
+  '/contact': typeof ContactRoute
+  '/faq': typeof FaqRoute
   '/help-me-choose': typeof HelpMeChooseRoute
+  '/locations': typeof LocationsRoute
   '/pickup': typeof PickupRoute
   '/plans': typeof PlansRouteWithChildren
   '/review': typeof ReviewRoute
@@ -103,7 +124,10 @@ export interface FileRoutesByTo {
   '/account': typeof AccountRoute
   '/cart': typeof CartRoute
   '/confirmation': typeof ConfirmationRoute
+  '/contact': typeof ContactRoute
+  '/faq': typeof FaqRoute
   '/help-me-choose': typeof HelpMeChooseRoute
+  '/locations': typeof LocationsRoute
   '/pickup': typeof PickupRoute
   '/plans': typeof PlansRouteWithChildren
   '/review': typeof ReviewRoute
@@ -118,7 +142,10 @@ export interface FileRoutesById {
   '/account': typeof AccountRoute
   '/cart': typeof CartRoute
   '/confirmation': typeof ConfirmationRoute
+  '/contact': typeof ContactRoute
+  '/faq': typeof FaqRoute
   '/help-me-choose': typeof HelpMeChooseRoute
+  '/locations': typeof LocationsRoute
   '/pickup': typeof PickupRoute
   '/plans': typeof PlansRouteWithChildren
   '/review': typeof ReviewRoute
@@ -134,7 +161,10 @@ export interface FileRouteTypes {
     | '/account'
     | '/cart'
     | '/confirmation'
+    | '/contact'
+    | '/faq'
     | '/help-me-choose'
+    | '/locations'
     | '/pickup'
     | '/plans'
     | '/review'
@@ -148,7 +178,10 @@ export interface FileRouteTypes {
     | '/account'
     | '/cart'
     | '/confirmation'
+    | '/contact'
+    | '/faq'
     | '/help-me-choose'
+    | '/locations'
     | '/pickup'
     | '/plans'
     | '/review'
@@ -162,7 +195,10 @@ export interface FileRouteTypes {
     | '/account'
     | '/cart'
     | '/confirmation'
+    | '/contact'
+    | '/faq'
     | '/help-me-choose'
+    | '/locations'
     | '/pickup'
     | '/plans'
     | '/review'
@@ -177,7 +213,10 @@ export interface RootRouteChildren {
   AccountRoute: typeof AccountRoute
   CartRoute: typeof CartRoute
   ConfirmationRoute: typeof ConfirmationRoute
+  ContactRoute: typeof ContactRoute
+  FaqRoute: typeof FaqRoute
   HelpMeChooseRoute: typeof HelpMeChooseRoute
+  LocationsRoute: typeof LocationsRoute
   PickupRoute: typeof PickupRoute
   PlansRoute: typeof PlansRouteWithChildren
   ReviewRoute: typeof ReviewRoute
@@ -215,11 +254,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PickupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/locations': {
+      id: '/locations'
+      path: '/locations'
+      fullPath: '/locations'
+      preLoaderRoute: typeof LocationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/help-me-choose': {
       id: '/help-me-choose'
       path: '/help-me-choose'
       fullPath: '/help-me-choose'
       preLoaderRoute: typeof HelpMeChooseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/faq': {
+      id: '/faq'
+      path: '/faq'
+      fullPath: '/faq'
+      preLoaderRoute: typeof FaqRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/confirmation': {
@@ -290,7 +350,10 @@ const rootRouteChildren: RootRouteChildren = {
   AccountRoute: AccountRoute,
   CartRoute: CartRoute,
   ConfirmationRoute: ConfirmationRoute,
+  ContactRoute: ContactRoute,
+  FaqRoute: FaqRoute,
   HelpMeChooseRoute: HelpMeChooseRoute,
+  LocationsRoute: LocationsRoute,
   PickupRoute: PickupRoute,
   PlansRoute: PlansRouteWithChildren,
   ReviewRoute: ReviewRoute,
