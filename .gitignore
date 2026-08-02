@@ -15,6 +15,9 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
+.env
+.env.*
+!.env.example
 
 # Ephemeral asset JSON backups during local build:prod
 src/assets/.asset-backup/
