@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { PageLayout } from "@/components/brand/PageLayout";
+import { GofofaLandingLayout } from "@/components/gofofa/GofofaLandingLayout";
 import { StepIndicator } from "@/components/brand/StepIndicator";
 import { AccentPill } from "@/components/brand/AccentBadge";
 import { planCategories } from "@/lib/mock-data";
@@ -17,7 +17,15 @@ export const Route = createFileRoute("/plans")({
   component: Plans,
 });
 
-const allTags = ["All", "Protein", "Senior-friendly", "Low sodium", "Vegetarian", "Breakfast", "Meal prep"];
+const allTags = [
+  "All",
+  "Protein",
+  "Senior-friendly",
+  "Low sodium",
+  "Vegetarian",
+  "Breakfast",
+  "Meal prep",
+];
 
 function Plans() {
   const { totalItems } = useOrder();
@@ -29,7 +37,7 @@ function Plans() {
       : planCategories.filter((c) => c.tags.some((t) => t.toLowerCase() === tag.toLowerCase()));
 
   return (
-    <PageLayout showBack backTo="/" backLabel="Home">
+    <GofofaLandingLayout showBack backTo="/" backLabel="Home">
       <StepIndicator current="meals" />
 
       <div className="flex items-start justify-between gap-3 mb-2">
@@ -98,7 +106,10 @@ function Plans() {
               </div>
               <p className="mt-3 text-sm text-navy/70">
                 <span className="font-semibold text-navy">Includes:</span>{" "}
-                {cat.meals.slice(0, 3).map((m) => m.name).join(" · ")}
+                {cat.meals
+                  .slice(0, 3)
+                  .map((m) => m.name)
+                  .join(" · ")}
                 {cat.meals.length > 3 ? ` +${cat.meals.length - 3} more` : ""}
               </p>
               <div className="mt-4 flex items-center justify-between">
@@ -126,6 +137,6 @@ function Plans() {
           </Link>
         </div>
       )}
-    </PageLayout>
+    </GofofaLandingLayout>
   );
 }

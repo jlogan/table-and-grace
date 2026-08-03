@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { PageLayout } from "@/components/brand/PageLayout";
+import { GofofaLandingLayout } from "@/components/gofofa/GofofaLandingLayout";
 import { StepIndicator } from "@/components/brand/StepIndicator";
 import { BigButton, BigLink } from "@/components/brand/BigButton";
 import { categoryPrice, getCategory, ingredientItems, type PortionSize } from "@/lib/mock-data";
@@ -14,20 +14,13 @@ export const Route = createFileRoute("/cart")({
 });
 
 function Cart() {
-  const {
-    lines,
-    extras,
-    updateLineQty,
-    removeLine,
-    setExtraQty,
-    subtotal,
-  } = useOrder();
+  const { lines, extras, updateLineQty, removeLine, setExtraQty, subtotal } = useOrder();
   const nav = useNavigate();
 
   const isEmpty = lines.length === 0 && extras.length === 0;
 
   return (
-    <PageLayout showBack backTo="/plans" backLabel="Keep adding">
+    <GofofaLandingLayout showBack backTo="/plans" backLabel="Keep adding">
       <StepIndicator current="meals" />
       <h1 className="text-3xl font-display font-semibold">My order</h1>
 
@@ -58,7 +51,11 @@ function Cart() {
                         {l.portion} portions · ${price.toFixed(2)} each
                       </p>
                       <p className="mt-1 text-sm text-navy/70">
-                        Includes: {cat.meals.slice(0, 2).map((m) => m.name).join(", ")}
+                        Includes:{" "}
+                        {cat.meals
+                          .slice(0, 2)
+                          .map((m) => m.name)
+                          .join(", ")}
                         {cat.meals.length > 2 ? ` +${cat.meals.length - 2} more` : ""}
                       </p>
                     </div>
@@ -119,9 +116,7 @@ function Cart() {
           <div className="mt-8 rounded-3xl bg-cream-deep/60 border-2 border-cream-deep p-5">
             <div className="flex items-baseline justify-between">
               <span className="text-lg text-navy">Subtotal</span>
-              <span className="text-3xl font-display font-semibold">
-                ${subtotal.toFixed(2)}
-              </span>
+              <span className="text-3xl font-display font-semibold">${subtotal.toFixed(2)}</span>
             </div>
             <p className="mt-1 text-sm text-navy/70">
               You'll choose your pickup time on the next step.
@@ -140,7 +135,7 @@ function Cart() {
           </div>
         </>
       )}
-    </PageLayout>
+    </GofofaLandingLayout>
   );
 }
 

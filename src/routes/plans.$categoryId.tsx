@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { PageLayout } from "@/components/brand/PageLayout";
+import { GofofaLandingLayout } from "@/components/gofofa/GofofaLandingLayout";
 import { StepIndicator } from "@/components/brand/StepIndicator";
 import { BigButton } from "@/components/brand/BigButton";
 import { AccentPill } from "@/components/brand/AccentBadge";
@@ -25,9 +25,9 @@ export const Route = createFileRoute("/plans/$categoryId")({
   },
   component: CategoryDetail,
   notFoundComponent: () => (
-    <PageLayout showBack backTo="/plans" backLabel="All plans">
+    <GofofaLandingLayout showBack backTo="/plans" backLabel="All plans">
       <p className="text-lg">We couldn't find that meal plan.</p>
-    </PageLayout>
+    </GofofaLandingLayout>
   ),
 });
 
@@ -42,9 +42,9 @@ function CategoryDetail() {
 
   if (!cat) {
     return (
-      <PageLayout showBack backTo="/plans" backLabel="All plans">
+      <GofofaLandingLayout showBack backTo="/plans" backLabel="All plans">
         <p className="text-lg">We couldn't find that meal plan.</p>
-      </PageLayout>
+      </GofofaLandingLayout>
     );
   }
 
@@ -56,7 +56,7 @@ function CategoryDetail() {
   };
 
   return (
-    <PageLayout showBack backTo="/plans" backLabel="All plans">
+    <GofofaLandingLayout showBack backTo="/plans" backLabel="All plans">
       <StepIndicator current="meals" />
 
       <div>
@@ -148,9 +148,7 @@ function CategoryDetail() {
       <div className="mt-8 rounded-3xl bg-card border-2 border-cream-deep p-5">
         <div className="flex items-baseline justify-between">
           <span className="text-navy">Line total</span>
-          <span className="text-2xl font-display font-semibold">
-            ${(price * qty).toFixed(2)}
-          </span>
+          <span className="text-2xl font-display font-semibold">${(price * qty).toFixed(2)}</span>
         </div>
         <div className="mt-4 space-y-3">
           {added ? (
@@ -176,6 +174,6 @@ function CategoryDetail() {
           )}
         </div>
       </div>
-    </PageLayout>
+    </GofofaLandingLayout>
   );
 }

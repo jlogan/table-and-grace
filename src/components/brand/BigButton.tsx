@@ -35,7 +35,13 @@ interface BigLinkProps {
   className?: string;
 }
 
-export function BigLink({ to, params, variant = "primary", children, className = "" }: BigLinkProps) {
+export function BigLink({
+  to,
+  params,
+  variant = "primary",
+  children,
+  className = "",
+}: BigLinkProps) {
   return (
     <Link
       to={to as never}

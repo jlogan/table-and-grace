@@ -1,5 +1,15 @@
 import { Link } from "@tanstack/react-router";
-import { Menu, ShoppingBag, Phone, User, Utensils, Info, HelpCircle, Mail, Sparkles } from "lucide-react";
+import {
+  Menu,
+  ShoppingBag,
+  Phone,
+  User,
+  Utensils,
+  Info,
+  HelpCircle,
+  Mail,
+  Sparkles,
+} from "lucide-react";
 import { useState } from "react";
 import {
   Sheet,

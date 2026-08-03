@@ -20,11 +20,7 @@ export function Logo({
           Chef Margaux presents
         </span>
       )}
-      <img
-        src={logoAsset.url}
-        alt="Table and Grace"
-        className={`w-auto ${sizeMap[size]}`}
-      />
+      <img src={logoAsset.url} alt="Table and Grace" className={`w-auto ${sizeMap[size]}`} />
     </div>
   );
 }

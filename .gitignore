@@ -15,8 +15,6 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
-.env
-.env.*
 !.env.example
 
 # Ephemeral asset JSON backups during local build:prod
@@ -27,7 +25,6 @@ src/assets/.asset-backup/
 .dev.vars
 
 # Editor directories and files
-.vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
@@ -36,3 +33,4 @@ src/assets/.asset-backup/
 *.njsproj
 *.sln
 *.sw?
+config.bat

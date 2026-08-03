@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageLayout } from "@/components/brand/PageLayout";
-import { BigLink } from "@/components/brand/BigButton";
+import { GofofaLink } from "@/components/gofofa/GofofaButton";
+import { GofofaLandingLayout } from "@/components/gofofa/GofofaLandingLayout";
 import { MapPin, Clock } from "lucide-react";
 
 export const Route = createFileRoute("/locations")({
   head: () => ({
     meta: [
-      { title: "Pickup Locations — Acworth, Canton & Woodstock | Table and Grace" },
+      { title: "Pickup Locations — GOFOFA" },
       {
         name: "description",
         content:
@@ -15,8 +15,7 @@ export const Route = createFileRoute("/locations")({
       { property: "og:title", content: "Pickup Locations — Table and Grace" },
       {
         property: "og:description",
-        content:
-          "Fresh heat & eat meal pickup in Acworth, Canton, and Woodstock, Georgia.",
+        content: "Fresh heat & eat meal pickup in Acworth, Canton, and Woodstock, Georgia.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -48,31 +47,26 @@ const locations = [
 
 function LocationsPage() {
   return (
-    <PageLayout>
-      <header className="text-center mb-6">
-        <p className="inline-block rounded-full bg-gold-soft px-4 py-1 text-sm font-semibold text-navy">
+    <GofofaLandingLayout>
+      <header className="mb-6 text-center">
+        <p className="inline-block rounded-full bg-gofofa-green/15 px-4 py-1 text-sm font-semibold text-gofofa-green">
           Where to grab your meals
         </p>
-        <h1 className="mt-3 text-4xl font-display font-semibold text-navy">
-          Pickup Locations
-        </h1>
-        <p className="mt-3 text-lg text-navy/85">
-          Convenient pickup windows across North Georgia. Choose the spot closest
-          to home or work.
+        <h1 className="mt-3 text-4xl">Pickup Locations</h1>
+        <p className="mt-3 text-lg text-muted-foreground">
+          Convenient pickup windows across North Georgia.
         </p>
       </header>
 
       <ul className="space-y-4">
         {locations.map((l) => (
-          <li key={l.name} className="rounded-3xl bg-card border-2 border-cream-deep p-5">
+          <li key={l.name} className="rounded-3xl border-2 border-border bg-card p-5">
             <div className="flex items-start gap-3">
-              <div className="size-11 rounded-full bg-gold text-navy flex items-center justify-center flex-shrink-0">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-gofofa-green text-white">
                 <MapPin className="size-6" aria-hidden />
               </div>
               <div>
-                <h2 className="font-display text-2xl font-semibold text-navy">
-                  {l.name}
-                </h2>
+                <h2 className="text-2xl">{l.name}</h2>
                 <p className="text-base text-navy/90">{l.address}</p>
                 <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-navy">
                   <Clock className="size-4" aria-hidden />
@@ -85,10 +79,10 @@ function LocationsPage() {
       </ul>
 
       <div className="mt-8 text-center">
-        <BigLink to="/plans" variant="primary">
-          Start my order
-        </BigLink>
+        <GofofaLink to="/signup" variant="primary">
+          Join GOFOFA
+        </GofofaLink>
       </div>
-    </PageLayout>
+    </GofofaLandingLayout>
   );
 }

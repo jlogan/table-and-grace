@@ -31,11 +31,7 @@ export function PatternPanel({
 
   return (
     <div className={`relative isolate ${className}`} style={style} {...rest}>
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10"
-        style={bg}
-      />
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10" style={bg} />
       {children}
     </div>
   );

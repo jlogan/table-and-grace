@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PageLayout } from "@/components/brand/PageLayout";
-import { BigLink } from "@/components/brand/BigButton";
+import { GofofaLink } from "@/components/gofofa/GofofaButton";
+import { GofofaLandingLayout } from "@/components/gofofa/GofofaLandingLayout";
 import {
   Accordion,
   AccordionContent,
@@ -11,7 +11,7 @@ import {
 export const Route = createFileRoute("/faq")({
   head: () => ({
     meta: [
-      { title: "FAQ — Meal Prep Questions | Table and Grace" },
+      { title: "FAQ — GOFOFA Weekly Meals" },
       {
         name: "description",
         content:
@@ -20,8 +20,7 @@ export const Route = createFileRoute("/faq")({
       { property: "og:title", content: "FAQ — Table and Grace" },
       {
         property: "og:description",
-        content:
-          "Everything you need to know about ordering fresh pickup meals from Chef Margaux.",
+        content: "Everything you need to know about ordering fresh pickup meals from Chef Margaux.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -32,12 +31,12 @@ export const Route = createFileRoute("/faq")({
 
 const faqs = [
   {
-    q: "How do I place an order?",
-    a: "Choose a meal plan (like High Protein or Senior Size), pick your portion size (4oz or 6oz), add the quantity you'd like, and select a pickup window. That's it — we'll have your meals ready when you arrive.",
+    q: "How do I get started with GOFOFA?",
+    a: "Create your account, tell us your goals and preferences, and Chef Margaux will recommend weekly meals tailored to you. Review and update before cutoff when needed.",
   },
   {
-    q: "What's the difference between 4oz and 6oz portions?",
-    a: "The 4oz portion is our smaller, lighter serving — great for kids, seniors, or a lighter lunch. The 6oz portion is a full adult dinner-sized serving. Order whatever mix fits your household.",
+    q: "Do I pick every meal myself?",
+    a: "Not necessarily. GOFOFA is chef-guided — Margaux builds recommendations around your profile. You can review and adjust before each week's cutoff.",
   },
   {
     q: "How long do the meals last?",
@@ -63,36 +62,30 @@ const faqs = [
 
 function FaqPage() {
   return (
-    <PageLayout>
-      <header className="text-center mb-6">
-        <p className="inline-block rounded-full bg-gold-soft px-4 py-1 text-sm font-semibold text-navy">
+    <GofofaLandingLayout>
+      <header className="mb-6 text-center">
+        <p className="inline-block rounded-full bg-gofofa-green/15 px-4 py-1 text-sm font-semibold text-gofofa-green">
           Good questions
         </p>
-        <h1 className="mt-3 text-4xl font-display font-semibold text-navy">
-          Frequently Asked Questions
-        </h1>
+        <h1 className="mt-3 text-4xl">Frequently Asked Questions</h1>
       </header>
 
-      <div className="rounded-3xl bg-card border-2 border-cream-deep p-2 sm:p-4">
+      <div className="rounded-3xl border-2 border-border bg-card p-2 sm:p-4">
         <Accordion type="single" collapsible className="w-full">
           {faqs.map((f, i) => (
             <AccordionItem key={i} value={`item-${i}`}>
-              <AccordionTrigger className="text-left font-display text-lg text-navy">
-                {f.q}
-              </AccordionTrigger>
-              <AccordionContent className="text-base text-navy/85">
-                {f.a}
-              </AccordionContent>
+              <AccordionTrigger className="text-left text-lg">{f.q}</AccordionTrigger>
+              <AccordionContent className="text-base text-muted-foreground">{f.a}</AccordionContent>
             </AccordionItem>
           ))}
         </Accordion>
       </div>
 
       <div className="mt-8 text-center">
-        <BigLink to="/plans" variant="primary">
-          Ready? Start my order
-        </BigLink>
+        <GofofaLink to="/signup" variant="primary">
+          Create your GOFOFA account
+        </GofofaLink>
       </div>
-    </PageLayout>
+    </GofofaLandingLayout>
   );
 }

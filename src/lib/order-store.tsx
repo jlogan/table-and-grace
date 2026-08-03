@@ -63,7 +63,9 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) setState({ ...initialState, ...JSON.parse(raw) });
-    } catch {}
+    } catch {
+      // Ignore malformed local cart state and start fresh.
+    }
     setHydrated(true);
   }, []);
 
@@ -71,7 +73,9 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     if (!hydrated) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
+    } catch {
+      // Ignore storage quota/private-mode write failures.
+    }
   }, [state, hydrated]);
 
   const addLine = useCallback((categoryId: string, portion: PortionSize, quantity: number) => {
@@ -86,16 +90,19 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const updateLineQty = useCallback((categoryId: string, portion: PortionSize, quantity: number) => {
-    setState((s) => ({
-      ...s,
-      lines: s.lines
-        .map((l) =>
-          l.categoryId === categoryId && l.portion === portion ? { ...l, quantity } : l,
-        )
-        .filter((l) => l.quantity > 0),
-    }));
-  }, []);
+  const updateLineQty = useCallback(
+    (categoryId: string, portion: PortionSize, quantity: number) => {
+      setState((s) => ({
+        ...s,
+        lines: s.lines
+          .map((l) =>
+            l.categoryId === categoryId && l.portion === portion ? { ...l, quantity } : l,
+          )
+          .filter((l) => l.quantity > 0),
+      }));
+    },
+    [],
+  );
 
   const removeLine = useCallback((categoryId: string, portion: PortionSize) => {
     setState((s) => ({
