@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
-import { PageLayout } from "@/components/brand/PageLayout";
+import { GofofaLandingLayout } from "@/components/gofofa/GofofaLandingLayout";
 import { StepIndicator } from "@/components/brand/StepIndicator";
 import { BigLink } from "@/components/brand/BigButton";
 import {
@@ -28,14 +28,8 @@ const statusOrder: { key: OrderStatus; label: string; description: string }[] = 
 ];
 
 function Confirmation() {
-  const {
-    currentOrderId,
-    currentOrderStatus,
-    lines,
-    extras,
-    pickupWindowId,
-    subtotal,
-  } = useOrder();
+  const { currentOrderId, currentOrderStatus, lines, extras, pickupWindowId, subtotal } =
+    useOrder();
 
   const pickup = pickupWindows.find((p) => p.id === pickupWindowId);
   const idx = useMemo(
@@ -49,17 +43,17 @@ function Confirmation() {
 
   if (!currentOrderId) {
     return (
-      <PageLayout showBack backTo="/plans">
+      <GofofaLandingLayout showBack backTo="/plans">
         <p className="text-lg">You don't have a current order.</p>
         <div className="mt-4">
           <BigLink to="/plans">Start an order</BigLink>
         </div>
-      </PageLayout>
+      </GofofaLandingLayout>
     );
   }
 
   return (
-    <PageLayout showAccount>
+    <GofofaLandingLayout>
       <StepIndicator current="done" />
 
       <div className="rounded-3xl bg-gold-soft border-2 border-gold p-6 text-center">
@@ -143,9 +137,7 @@ function Confirmation() {
                 <span>
                   {e.quantity} × {ing.name}
                 </span>
-                <span className="font-semibold">
-                  ${(ing.price * e.quantity).toFixed(2)}
-                </span>
+                <span className="font-semibold">${(ing.price * e.quantity).toFixed(2)}</span>
               </li>
             );
           })}
@@ -165,6 +157,6 @@ function Confirmation() {
           Back to home
         </Link>
       </div>
-    </PageLayout>
+    </GofofaLandingLayout>
   );
 }

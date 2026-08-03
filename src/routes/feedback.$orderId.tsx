@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { PageLayout } from "@/components/brand/PageLayout";
+import { GofofaLandingLayout } from "@/components/gofofa/GofofaLandingLayout";
 import { BigButton } from "@/components/brand/BigButton";
 import { getCategory } from "@/lib/mock-data";
 import { useOrder } from "@/lib/order-store";
@@ -27,15 +27,15 @@ function Feedback() {
 
   if (!order) {
     return (
-      <PageLayout showBack backTo="/account" backLabel="My account">
+      <GofofaLandingLayout showBack backTo="/account" backLabel="My account">
         <p className="text-lg">We couldn't find that order.</p>
-      </PageLayout>
+      </GofofaLandingLayout>
     );
   }
 
   if (sent) {
     return (
-      <PageLayout showBack backTo="/account" backLabel="My account">
+      <GofofaLandingLayout showBack backTo="/account" backLabel="My account">
         <div className="rounded-3xl bg-gold-soft border-2 border-gold p-6 text-center">
           <div className="mx-auto size-14 rounded-full bg-navy text-primary-foreground flex items-center justify-center">
             <CheckCircle2 className="size-8" aria-hidden />
@@ -48,15 +48,13 @@ function Feedback() {
             <BigButton onClick={() => nav({ to: "/account" })}>Back to my account</BigButton>
           </div>
         </div>
-      </PageLayout>
+      </GofofaLandingLayout>
     );
   }
 
   return (
-    <PageLayout showBack backTo="/account" backLabel="My account">
-      <p className="text-xs font-bold uppercase tracking-widest text-gold">
-        Order #{order.id}
-      </p>
+    <GofofaLandingLayout showBack backTo="/account" backLabel="My account">
+      <p className="text-xs font-bold uppercase tracking-widest text-gold">Order #{order.id}</p>
       <h1 className="mt-1 text-3xl font-display font-semibold">
         How did these meals work for you?
       </h1>
@@ -135,7 +133,7 @@ function Feedback() {
           Send my feedback
         </BigButton>
       </div>
-    </PageLayout>
+    </GofofaLandingLayout>
   );
 }
 
@@ -148,7 +146,9 @@ function RatingRow({ value, onChange }: { value: number; onChange: (n: number) =
           onClick={() => onChange(n)}
           className={[
             "size-12 rounded-full border-2 flex items-center justify-center",
-            n <= value ? "bg-gold border-gold text-navy" : "bg-background border-border text-navy/50",
+            n <= value
+              ? "bg-gold border-gold text-navy"
+              : "bg-background border-border text-navy/50",
           ].join(" ")}
           aria-label={`${n} out of 5`}
           aria-pressed={n === value}

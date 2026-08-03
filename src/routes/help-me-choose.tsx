@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { PageLayout } from "@/components/brand/PageLayout";
+import { GofofaLandingLayout } from "@/components/gofofa/GofofaLandingLayout";
 import { BigButton } from "@/components/brand/BigButton";
 import { recommendFromGoals, wizardGoals, type PlanCategory } from "@/lib/mock-data";
 import { useOrder } from "@/lib/order-store";
@@ -38,7 +38,7 @@ function HelpMeChoose() {
   };
 
   return (
-    <PageLayout showBack backTo="/plans" backLabel="Back to plans">
+    <GofofaLandingLayout showBack backTo="/plans" backLabel="Back to plans">
       <div className="rounded-3xl bg-gold-soft border-2 border-gold p-5">
         <div className="flex items-center gap-2 font-semibold text-navy">
           <Sparkles className="size-5" aria-hidden />
@@ -96,14 +96,13 @@ function HelpMeChoose() {
       ) : (
         <>
           <h2 className="mt-6 text-2xl font-display font-semibold">
-            {results.length === 1 ? "Here's a plan we think you'll love" : "Here are a few good fits"}
+            {results.length === 1
+              ? "Here's a plan we think you'll love"
+              : "Here are a few good fits"}
           </h2>
           <ul className="mt-4 space-y-4">
             {results.map((cat) => (
-              <li
-                key={cat.id}
-                className="rounded-3xl bg-card border-2 border-cream-deep p-5"
-              >
+              <li key={cat.id} className="rounded-3xl bg-card border-2 border-cream-deep p-5">
                 <p className="text-xs font-bold uppercase tracking-widest text-gold">
                   {cat.tagline}
                 </p>
@@ -149,6 +148,6 @@ function HelpMeChoose() {
           </div>
         </>
       )}
-    </PageLayout>
+    </GofofaLandingLayout>
   );
 }

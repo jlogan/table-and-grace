@@ -81,17 +81,18 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "color-scheme", content: "light only" },
       { name: "supported-color-schemes", content: "light" },
-      { title: "Table and Grace — Fresh Pickup Heat & Eat Meals" },
+      { title: "GOFOFA — Weekly Meals from Table and Grace" },
       {
         name: "description",
         content:
-          "Chef Margaux presents Table and Grace. Fresh pickup heat & eat meals, made with love. Order ahead and pick up in Acworth, Canton, or Woodstock.",
+          "GOFOFA by Chef Margaux — personal-chef-style weekly meal planning. Fresh meals built around your goals. Join and start your meal plan today.",
       },
-      { name: "author", content: "Table and Grace" },
-      { property: "og:title", content: "Table and Grace — Fresh Pickup Meals" },
+      { name: "author", content: "GOFOFA / Table and Grace" },
+      { property: "og:title", content: "GOFOFA — Good Food. Made Right. Made For You." },
       {
         property: "og:description",
-        content: "Good cookin' is love you can taste. Order fresh heat & eat meals for pickup.",
+        content:
+          "Fresh weekly meals planned around your goals. Chef-guided meal prep from Table and Grace.",
       },
       { property: "og:type", content: "website" },
       { property: "og:url", content: "https://tag.ourstagingserver.com/" },
@@ -104,10 +105,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         content: "Table and Grace fresh pickup meals advertisement with Chef Margaux.",
       },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "Table and Grace — Fresh Pickup Meals" },
+      { name: "twitter:title", content: "GOFOFA — Weekly Meals from Table and Grace" },
       {
         name: "twitter:description",
-        content: "Good cookin' is love you can taste. Order fresh heat & eat meals for pickup.",
+        content: "Personal-chef-style weekly meal planning. Fresh meals built around your goals.",
       },
       { name: "twitter:image", content: "https://tag.ourstagingserver.com/og-image.png" },
       {
@@ -125,7 +126,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Inter:wght@400;500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Anton&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,600&family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap",
       },
     ],
   }),

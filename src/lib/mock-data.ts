@@ -33,11 +33,7 @@ export interface PickupWindow {
   time: string;
 }
 
-export type OrderStatus =
-  | "received"
-  | "preparing"
-  | "ready"
-  | "picked-up";
+export type OrderStatus = "received" | "preparing" | "ready" | "picked-up";
 
 export interface OrderLine {
   categoryId: string;
@@ -156,8 +152,7 @@ export const planCategories: PlanCategory[] = [
     id: "veggie",
     name: "Veggie Meals",
     tagline: "Garden-forward",
-    description:
-      "Hearty meatless meals with real vegetables at the center. Never an afterthought.",
+    description: "Hearty meatless meals with real vegetables at the center. Never an afterthought.",
     recommendedFor: "For meatless days or anyone who loves vegetables.",
     tags: ["Vegetarian", "Veggie"],
     price4oz: 8.5,
@@ -173,8 +168,7 @@ export const planCategories: PlanCategory[] = [
     id: "diy",
     name: "DIY Meal Prep Ingredients",
     tagline: "Build your own",
-    description:
-      "Cooked proteins, grains, and sides by the container — mix and match your week.",
+    description: "Cooked proteins, grains, and sides by the container — mix and match your week.",
     recommendedFor: "Best for meal preppers who like to build their own bowls.",
     tags: ["Meal prep", "Build-your-own"],
     price4oz: 6.0,
@@ -190,8 +184,18 @@ export const planCategories: PlanCategory[] = [
 ];
 
 export const ingredientItems: IngredientItem[] = [
-  { id: "ing-shredded-chick", name: "Shredded Chicken", description: "Seasoned & pulled", price: 7.5 },
-  { id: "ing-green-beans", name: "Fresh Seasoned Green Beans", description: "Buttery & bright", price: 5.0 },
+  {
+    id: "ing-shredded-chick",
+    name: "Shredded Chicken",
+    description: "Seasoned & pulled",
+    price: 7.5,
+  },
+  {
+    id: "ing-green-beans",
+    name: "Fresh Seasoned Green Beans",
+    description: "Buttery & bright",
+    price: 5.0,
+  },
   { id: "ing-basmati", name: "Basmati Rice", description: "Fluffy long grain", price: 4.5 },
   { id: "ing-black-beans", name: "Black Beans", description: "Slow-simmered", price: 4.5 },
   { id: "ing-veg-salad", name: "Veggie Side Salad", description: "Crisp & fresh", price: 6.0 },
@@ -199,7 +203,12 @@ export const ingredientItems: IngredientItem[] = [
 
 export const pickupWindows: PickupWindow[] = [
   { id: "tue-pm", label: "Tuesday 3:00 PM – 5:00 PM", day: "Tuesday", time: "3:00 PM – 5:00 PM" },
-  { id: "wed-pm", label: "Wednesday 3:00 PM – 5:00 PM", day: "Wednesday", time: "3:00 PM – 5:00 PM" },
+  {
+    id: "wed-pm",
+    label: "Wednesday 3:00 PM – 5:00 PM",
+    day: "Wednesday",
+    time: "3:00 PM – 5:00 PM",
+  },
   { id: "fri-am", label: "Friday 11:00 AM – 1:00 PM", day: "Friday", time: "11:00 AM – 1:00 PM" },
 ];
 

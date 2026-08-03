@@ -1,14 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { PageLayout } from "@/components/brand/PageLayout";
+import { GofofaLandingLayout } from "@/components/gofofa/GofofaLandingLayout";
 import { StepIndicator } from "@/components/brand/StepIndicator";
 import { BigButton } from "@/components/brand/BigButton";
-import {
-  categoryPrice,
-  getCategory,
-  getIngredient,
-  pickupWindows,
-} from "@/lib/mock-data";
+import { categoryPrice, getCategory, getIngredient, pickupWindows } from "@/lib/mock-data";
 import { useOrder } from "@/lib/order-store";
 import { Pencil, ChevronRight } from "lucide-react";
 
@@ -29,14 +24,14 @@ function Review() {
 
   if (lines.length === 0 && extras.length === 0) {
     return (
-      <PageLayout showBack backTo="/cart" backLabel="Back">
+      <GofofaLandingLayout showBack backTo="/cart" backLabel="Back">
         <p className="text-lg">Your order is empty. Add a plan first.</p>
-      </PageLayout>
+      </GofofaLandingLayout>
     );
   }
 
   return (
-    <PageLayout showBack backTo="/cart" backLabel="Back to cart">
+    <GofofaLandingLayout showBack backTo="/cart" backLabel="Back to cart">
       <StepIndicator current="review" />
       <h1 className="text-3xl font-display font-semibold">Review my order</h1>
       <p className="mt-2 text-navy/80">Take a look before we send it to the kitchen.</p>
@@ -70,9 +65,7 @@ function Review() {
             return (
               <li key={cat.id + l.portion} className="flex justify-between gap-3">
                 <div>
-                  <p className="text-lg font-semibold text-navy">
-                    {cat.name}
-                  </p>
+                  <p className="text-lg font-semibold text-navy">{cat.name}</p>
                   <p className="text-sm text-navy/75">
                     {l.quantity} × {l.portion} · ${price.toFixed(2)} each
                   </p>
@@ -129,9 +122,7 @@ function Review() {
       <div className="mt-6 rounded-3xl bg-cream-deep/60 border-2 border-cream-deep p-5">
         <div className="flex items-baseline justify-between">
           <span className="text-lg">Total</span>
-          <span className="text-3xl font-display font-semibold">
-            ${subtotal.toFixed(2)}
-          </span>
+          <span className="text-3xl font-display font-semibold">${subtotal.toFixed(2)}</span>
         </div>
         <p className="mt-1 text-sm text-navy/70">You'll pay in person at pickup.</p>
         <div className="mt-4">
@@ -144,7 +135,7 @@ function Review() {
           </BigButton>
         </div>
       </div>
-    </PageLayout>
+    </GofofaLandingLayout>
   );
 }
 

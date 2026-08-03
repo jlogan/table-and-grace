@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { PageLayout } from "@/components/brand/PageLayout";
+import { GofofaLandingLayout } from "@/components/gofofa/GofofaLandingLayout";
 import { StepIndicator } from "@/components/brand/StepIndicator";
 import { BigButton } from "@/components/brand/BigButton";
 import { pickupWindows } from "@/lib/mock-data";
@@ -24,7 +24,7 @@ function Pickup() {
   };
 
   return (
-    <PageLayout showBack backTo="/review" backLabel="Back">
+    <GofofaLandingLayout showBack backTo="/review" backLabel="Back">
       <StepIndicator current="pickup" />
       <h1 className="text-3xl font-display font-semibold">Choose a pickup time</h1>
       <p className="mt-2 text-navy/80">
@@ -75,6 +75,6 @@ function Pickup() {
           Submit my order <ChevronRight className="size-5" />
         </BigButton>
       </div>
-    </PageLayout>
+    </GofofaLandingLayout>
   );
 }

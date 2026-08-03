@@ -58,8 +58,16 @@ html {
   --color-orange: var(--orange);
   --color-pink: var(--pink);
 
+  --color-gofofa-green: var(--gofofa-green);
+  --color-gofofa-red: var(--gofofa-red);
+  --color-gofofa-black: var(--gofofa-black);
+  --color-gofofa-gray: var(--gofofa-gray);
+  --color-gofofa-cream: var(--gofofa-cream);
+
   --font-display: "Fraunces", "Mrs Eaves", Georgia, serif;
   --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-gofofa-display: "Anton", "Impact", sans-serif;
+  --font-gofofa-body: "Montserrat", "Helvetica Neue", Arial, sans-serif;
 }
 
 :root {
@@ -75,6 +83,13 @@ html {
   --green: #26bb00;
   --orange: #ff4d00;
   --pink: #ffc5ef;
+
+  /* GOFOFA brand palette (also scoped in .gofofa-app) */
+  --gofofa-green: #4b5e34;
+  --gofofa-red: #b1121d;
+  --gofofa-black: #111111;
+  --gofofa-gray: #555555;
+  --gofofa-cream: #f7f7f5;
 
   /* Semantic tokens map onto brand */
   --background: #f0f0e0;
@@ -227,4 +242,56 @@ html {
   font-family: var(--font-sans);
   color: var(--foreground);
   letter-spacing: -0.01em;
+}
+
+/*
+ * gofofa-app: customer marketing / landing pages
+ * Fresh, bold GOFOFA brand — green/red accents, Anton + Montserrat
+ */
+.gofofa-app {
+  --gofofa-green: #4b5e34;
+  --gofofa-red: #b1121d;
+  --gofofa-black: #111111;
+  --gofofa-gray: #555555;
+  --gofofa-cream: #f7f7f5;
+
+  --radius: 0.75rem;
+
+  --background: #f7f7f5;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #4b5e34;
+  --primary-foreground: #ffffff;
+  --secondary: #ececea;
+  --secondary-foreground: #111111;
+  --muted: #ececea;
+  --muted-foreground: #555555;
+  --accent: #b1121d;
+  --accent-foreground: #ffffff;
+  --destructive: #b1121d;
+  --destructive-foreground: #ffffff;
+  --border: #d9d9d4;
+  --input: #d9d9d4;
+  --ring: #4b5e34;
+
+  font-size: 17px;
+}
+
+.gofofa-app body,
+.gofofa-app {
+  font-family: var(--font-gofofa-body);
+}
+
+.gofofa-app h1,
+.gofofa-app h2,
+.gofofa-app h3,
+.gofofa-app h4 {
+  font-family: var(--font-gofofa-display);
+  color: var(--gofofa-black);
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  text-transform: uppercase;
 }
