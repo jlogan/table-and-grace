@@ -6,6 +6,21 @@ import { z } from "zod";
  * Set these in Buddy project variables, CloudPanel PM2 env, or a local `.env`
  * file (never commit real values). See `.env.example` for placeholders.
  */
+const optionalNonEmptyString = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().min(1).optional(),
+);
+
+const optionalEmail = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().email().optional(),
+);
+
+const optionalCronSecret = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().min(16).optional(),
+);
+
 export const serverEnvSchema = z.object({
   /** MySQL connection string (server-only). */
   DATABASE_URL: z
@@ -23,31 +38,31 @@ export const serverEnvSchema = z.object({
   APP_URL: z.string().url("APP_URL must be a valid URL"),
 
   /** Stripe secret API key (Phase 2+). */
-  STRIPE_SECRET_KEY: z.string().min(1).optional(),
+  STRIPE_SECRET_KEY: optionalNonEmptyString,
 
   /** Stripe webhook signing secret (Phase 2+). */
-  STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
+  STRIPE_WEBHOOK_SECRET: optionalNonEmptyString,
 
   /** Stripe publishable key for Payment Element (Phase 2+). */
-  STRIPE_PUBLISHABLE_KEY: z.string().min(1).optional(),
+  STRIPE_PUBLISHABLE_KEY: optionalNonEmptyString,
 
   /** Resend API key for transactional email (Phase 3+). */
-  RESEND_API_KEY: z.string().min(1).optional(),
+  RESEND_API_KEY: optionalNonEmptyString,
 
   /** Resend "from" address, e.g. orders@tableandgrace.com */
-  RESEND_FROM_EMAIL: z.string().email().optional(),
+  RESEND_FROM_EMAIL: optionalEmail,
 
   /** Twilio account SID (Phase 4+ SMS). */
-  TWILIO_ACCOUNT_SID: z.string().min(1).optional(),
+  TWILIO_ACCOUNT_SID: optionalNonEmptyString,
 
   /** Twilio auth token (Phase 4+ SMS). */
-  TWILIO_AUTH_TOKEN: z.string().min(1).optional(),
+  TWILIO_AUTH_TOKEN: optionalNonEmptyString,
 
   /** Twilio sender phone number in E.164 format. */
-  TWILIO_FROM_NUMBER: z.string().min(1).optional(),
+  TWILIO_FROM_NUMBER: optionalNonEmptyString,
 
   /** Shared secret for CloudPanel cron → /api/jobs/* endpoints. */
-  CRON_SECRET: z.string().min(16).optional(),
+  CRON_SECRET: optionalCronSecret,
 
   NODE_ENV: z.enum(["development", "production", "test"]).optional(),
 });
