@@ -8,6 +8,8 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
+import { fetchCurrentUser } from "@/auth/auth.functions.server";
+import type { RouterContext } from "@/router";
 import appCss from "../styles.css?url";
 import { reportRuntimeError } from "../lib/runtime-error-reporting";
 import { OrderProvider } from "../lib/order-store";
@@ -68,7 +70,11 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+export const Route = createRootRouteWithContext<RouterContext>()({
+  beforeLoad: async () => {
+    const user = await fetchCurrentUser();
+    return { user };
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },

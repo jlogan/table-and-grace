@@ -1,32 +1,72 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { PageLayout } from "@/components/brand/PageLayout";
-import {
-  categoryPrice,
-  getCategory,
-  getIngredient,
-  pickupWindows,
-} from "@/lib/mock-data";
+import { categoryPrice, getCategory, getIngredient, pickupWindows } from "@/lib/mock-data";
 import { useOrder } from "@/lib/order-store";
 import { BigLink } from "@/components/brand/BigButton";
-import { CircleCheck, PauseCircle, MessageCircle, Repeat } from "lucide-react";
+import { CircleCheck, PauseCircle, MessageCircle, Repeat, LogOut, Shield } from "lucide-react";
+import { logout } from "@/auth/auth.functions.server";
 
 export const Route = createFileRoute("/account")({
+  beforeLoad: ({ context, location }) => {
+    if (!context.user) {
+      throw redirect({
+        to: "/login",
+        search: { redirect: location.pathname },
+      });
+    }
+  },
   head: () => ({
-    meta: [{ title: "My Account — Table and Grace" }],
+    meta: [{ title: "My Account — GOFOFA" }],
   }),
   component: Account,
 });
 
 function Account() {
+  const { user } = Route.useRouteContext();
+  const router = useRouter();
+  const logoutFn = useServerFn(logout);
   const { currentOrderId, pickupWindowId, lines, extras, pastOrders, reorder } = useOrder();
   const pickup = pickupWindows.find((p) => p.id === pickupWindowId);
+
+  if (!user) {
+    return null;
+  }
+
+  const displayName = user.name?.trim() || user.email;
+
+  async function handleLogout() {
+    await logoutFn();
+    await router.invalidate();
+    await router.navigate({ to: "/", replace: true });
+  }
 
   return (
     <PageLayout showBack backTo="/" backLabel="Home" showAccount={false}>
       <div className="rounded-3xl bg-card border-2 border-cream-deep p-5">
         <p className="text-xs font-bold uppercase tracking-widest text-gold">Welcome back</p>
-        <h1 className="mt-1 text-3xl font-display font-semibold">Margaret Wilson</h1>
-        <p className="mt-1 text-navy/80">(770) 555-0142</p>
+        <h1 className="mt-1 text-3xl font-display font-semibold">{displayName}</h1>
+        <p className="mt-1 text-navy/80">{user.email}</p>
+        {user.phone ? <p className="mt-1 text-navy/80">{user.phone}</p> : null}
+        <div className="mt-4 flex flex-wrap gap-3">
+          {user.role === "admin" ? (
+            <Link
+              to="/admin"
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-navy px-4 text-navy font-semibold"
+            >
+              <Shield className="size-5" aria-hidden />
+              Admin
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-navy px-4 text-navy font-semibold"
+          >
+            <LogOut className="size-5" aria-hidden />
+            Log out
+          </button>
+        </div>
       </div>
 
       <section className="mt-6 rounded-3xl bg-cream-deep/60 border-2 border-cream-deep p-5">
