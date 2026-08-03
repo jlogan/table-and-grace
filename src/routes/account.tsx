@@ -1,11 +1,14 @@
 import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { PageLayout } from "@/components/brand/PageLayout";
+import { CircleCheck, LogOut, MessageCircle, PauseCircle, Repeat, Shield } from "lucide-react";
+
+import { logout } from "@/auth/auth.functions.server";
+import { MemberLayout } from "@/components/gofofa/MemberLayout";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { categoryPrice, getCategory, getIngredient, pickupWindows } from "@/lib/mock-data";
 import { useOrder } from "@/lib/order-store";
-import { BigLink } from "@/components/brand/BigButton";
-import { CircleCheck, PauseCircle, MessageCircle, Repeat, LogOut, Shield } from "lucide-react";
-import { logout } from "@/auth/auth.functions.server";
 
 export const Route = createFileRoute("/account")({
   beforeLoad: ({ context, location }) => {
@@ -42,146 +45,145 @@ function Account() {
   }
 
   return (
-    <PageLayout showBack backTo="/" backLabel="Home" showAccount={false}>
-      <div className="rounded-3xl bg-card border-2 border-cream-deep p-5">
-        <p className="text-xs font-bold uppercase tracking-widest text-gold">Welcome back</p>
-        <h1 className="mt-1 text-3xl font-display font-semibold">{displayName}</h1>
-        <p className="mt-1 text-navy/80">{user.email}</p>
-        {user.phone ? <p className="mt-1 text-navy/80">{user.phone}</p> : null}
-        <div className="mt-4 flex flex-wrap gap-3">
-          {user.role === "admin" ? (
-            <Link
-              to="/admin"
-              className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-navy px-4 text-navy font-semibold"
-            >
-              <Shield className="size-5" aria-hidden />
-              Admin
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-navy px-4 text-navy font-semibold"
-          >
-            <LogOut className="size-5" aria-hidden />
-            Log out
-          </button>
-        </div>
-      </div>
-
-      <section className="mt-6 rounded-3xl bg-cream-deep/60 border-2 border-cream-deep p-5">
-        <div className="flex items-center gap-3">
-          <CircleCheck className="size-7 text-green" aria-hidden />
-          <div>
-            <p className="text-sm font-semibold text-navy">Subscription: Active</p>
-            <p className="text-sm text-navy/75">Weekly meal plan · Next order Tuesday</p>
+    <MemberLayout>
+      <Card>
+        <CardHeader>
+          <CardDescription>Your GOFOFA account</CardDescription>
+          <CardTitle className="text-2xl">{displayName}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1 text-sm text-muted-foreground">
+          <p>{user.email}</p>
+          {user.phone ? <p>{user.phone}</p> : null}
+          <div className="flex flex-wrap gap-2 pt-3">
+            {user.role === "admin" ? (
+              <Button variant="outline" className="min-h-11" asChild>
+                <Link to="/admin">
+                  <Shield className="size-4" aria-hidden />
+                  Admin
+                </Link>
+              </Button>
+            ) : null}
+            <Button variant="outline" className="min-h-11" onClick={handleLogout}>
+              <LogOut className="size-4" aria-hidden />
+              Log out
+            </Button>
           </div>
-        </div>
-        <div className="mt-3 flex gap-3">
-          <button className="min-h-12 flex-1 rounded-full border-2 border-navy text-navy font-semibold flex items-center justify-center gap-2">
-            <PauseCircle className="size-5" aria-hidden /> Pause
-          </button>
-          <Link
-            to="/plans"
-            className="min-h-12 flex-1 rounded-full bg-navy text-primary-foreground font-semibold flex items-center justify-center"
-          >
-            Adjust plan
-          </Link>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
-      <section className="mt-6">
-        <h2 className="text-2xl font-display font-semibold">Current order</h2>
-        {currentOrderId ? (
-          <Link
-            to="/confirmation"
-            className="mt-3 block rounded-3xl bg-card border-2 border-cream-deep p-5"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm text-navy/70">Order #{currentOrderId}</p>
-                <p className="text-lg font-semibold text-navy mt-1">
-                  {pickup ? `Pickup ${pickup.day}, ${pickup.time}` : "Pickup: pending"}
-                </p>
-                <p className="text-sm text-navy/75 mt-1">
-                  {lines.reduce((n, l) => n + l.quantity, 0) +
-                    extras.reduce((n, e) => n + e.quantity, 0)}{" "}
-                  items
-                </p>
-              </div>
-              <span className="rounded-full bg-gold px-3 py-1 text-sm font-semibold text-navy whitespace-nowrap">
-                Preparing
-              </span>
+      <Card className="mt-6">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <CircleCheck className="mt-0.5 size-5 shrink-0 text-green" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">Subscription: Active</p>
+              <p className="text-sm text-muted-foreground">Weekly meal plan · Next order Tuesday</p>
             </div>
-            <p className="mt-3 text-sm font-semibold text-navy underline underline-offset-4">
-              See order status →
-            </p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <Button variant="outline" className="min-h-11">
+              <PauseCircle className="size-4" aria-hidden />
+              Pause
+            </Button>
+            <Button className="min-h-11" asChild>
+              <Link to="/plans">Adjust plan</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <section className="mt-8">
+        <h2 className="text-lg font-semibold tracking-tight">Current order</h2>
+        {currentOrderId ? (
+          <Link to="/confirmation" className="mt-3 block">
+            <Card className="transition-colors hover:bg-muted/30">
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Order #{currentOrderId}</p>
+                    <p className="mt-1 font-medium">
+                      {pickup ? `Pickup ${pickup.day}, ${pickup.time}` : "Pickup: pending"}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {lines.reduce((n, l) => n + l.quantity, 0) +
+                        extras.reduce((n, e) => n + e.quantity, 0)}{" "}
+                      items
+                    </p>
+                  </div>
+                  <Badge variant="secondary">Preparing</Badge>
+                </div>
+                <p className="mt-3 text-sm font-medium underline underline-offset-4">
+                  See order status →
+                </p>
+              </CardContent>
+            </Card>
           </Link>
         ) : (
-          <div className="mt-3 rounded-3xl bg-card border-2 border-cream-deep p-5 text-center">
-            <p className="text-navy/80">You don't have a current order.</p>
-            <div className="mt-4">
-              <BigLink to="/plans">Start a new order</BigLink>
-            </div>
-          </div>
+          <Card className="mt-3">
+            <CardContent className="py-8 text-center">
+              <p className="text-muted-foreground">You don&apos;t have a current order.</p>
+              <Button className="mt-4 min-h-11" asChild>
+                <Link to="/plans">Start a new order</Link>
+              </Button>
+            </CardContent>
+          </Card>
         )}
       </section>
 
       <section className="mt-8">
-        <h2 className="text-2xl font-display font-semibold">Past orders</h2>
+        <h2 className="text-lg font-semibold tracking-tight">Past orders</h2>
         <ul className="mt-3 space-y-4">
           {pastOrders.map((o) => (
-            <li key={o.id} className="rounded-3xl bg-card border-2 border-cream-deep p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm text-navy/70">Order #{o.id}</p>
-                  <p className="text-lg font-semibold text-navy">{o.pickupLabel}</p>
-                  <p className="text-sm text-navy/75">{o.placedAt} · Picked up</p>
-                </div>
-                <span className="font-display font-semibold">${o.total.toFixed(2)}</span>
-              </div>
-              <ul className="mt-3 space-y-1 text-sm text-navy/80">
-                {o.lines.map((l) => {
-                  const cat = getCategory(l.categoryId);
-                  if (!cat) return null;
-                  return (
-                    <li key={cat.id + l.portion}>
-                      {l.quantity} × {cat.name} ({l.portion}) — $
-                      {(categoryPrice(cat, l.portion) * l.quantity).toFixed(2)}
-                    </li>
-                  );
-                })}
-                {o.extras.map((e) => {
-                  const ing = getIngredient(e.ingredientId);
-                  if (!ing) return null;
-                  return (
-                    <li key={ing.id}>
-                      {e.quantity} × {ing.name}
-                    </li>
-                  );
-                })}
-              </ul>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <Link
-                  to="/feedback/$orderId"
-                  params={{ orderId: o.id }}
-                  className="min-h-12 rounded-full border-2 border-navy text-navy font-semibold flex items-center justify-center gap-2"
-                >
-                  <MessageCircle className="size-5" aria-hidden />
-                  {o.feedbackLeft ? "Feedback sent" : "Leave feedback"}
-                </Link>
-                <button
-                  onClick={() => reorder(o)}
-                  className="min-h-12 rounded-full bg-gold text-navy font-semibold flex items-center justify-center gap-2"
-                >
-                  <Repeat className="size-5" aria-hidden />
-                  Order again
-                </button>
-              </div>
+            <li key={o.id}>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Order #{o.id}</p>
+                      <p className="mt-1 font-medium">{o.pickupLabel}</p>
+                      <p className="text-sm text-muted-foreground">{o.placedAt} · Picked up</p>
+                    </div>
+                    <span className="font-semibold tabular-nums">${o.total.toFixed(2)}</span>
+                  </div>
+                  <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
+                    {o.lines.map((l) => {
+                      const cat = getCategory(l.categoryId);
+                      if (!cat) return null;
+                      return (
+                        <li key={cat.id + l.portion}>
+                          {l.quantity} × {cat.name} ({l.portion}) — $
+                          {(categoryPrice(cat, l.portion) * l.quantity).toFixed(2)}
+                        </li>
+                      );
+                    })}
+                    {o.extras.map((e) => {
+                      const ing = getIngredient(e.ingredientId);
+                      if (!ing) return null;
+                      return (
+                        <li key={ing.id}>
+                          {e.quantity} × {ing.name}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <Button variant="outline" className="min-h-11" asChild>
+                      <Link to="/feedback/$orderId" params={{ orderId: o.id }}>
+                        <MessageCircle className="size-4" aria-hidden />
+                        {o.feedbackLeft ? "Feedback sent" : "Leave feedback"}
+                      </Link>
+                    </Button>
+                    <Button className="min-h-11" onClick={() => reorder(o)}>
+                      <Repeat className="size-4" aria-hidden />
+                      Order again
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </li>
           ))}
         </ul>
       </section>
-    </PageLayout>
+    </MemberLayout>
   );
 }

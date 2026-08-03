@@ -126,7 +126,10 @@ html {
     -webkit-font-smoothing: antialiased;
   }
 
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     font-family: var(--font-display);
     color: var(--color-navy);
     letter-spacing: -0.01em;
@@ -145,7 +148,83 @@ html {
 
 @utility scallop-border {
   /* Decorative scalloped edge nod to the brand seal */
-  background:
-    radial-gradient(circle at 10px 0, var(--cream) 8px, transparent 9px) repeat-x;
+  background: radial-gradient(circle at 10px 0, var(--cream) 8px, transparent 9px) repeat-x;
   background-size: 20px 10px;
+}
+
+/*
+ * GOFOFA theme scopes — keep marketing :root tokens unchanged.
+ * admin-app: kitchen ops software (dense, neutral slate)
+ * member-app: GOFOFA member portal (clean, accessible)
+ */
+
+.admin-app {
+  --radius: 0.5rem;
+
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #1e293b;
+  --primary-foreground: #f8fafc;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #334155;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #e2e8f0;
+  --accent-foreground: #0f172a;
+  --destructive: #dc2626;
+  --destructive-foreground: #fef2f2;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #94a3b8;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #1e293b;
+  --sidebar-primary-foreground: #f8fafc;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #94a3b8;
+
+  font-size: 16px;
+}
+
+.admin-app h1,
+.admin-app h2,
+.admin-app h3,
+.admin-app h4 {
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  letter-spacing: -0.015em;
+}
+
+.member-app {
+  --radius: 0.75rem;
+
+  --background: #fafafa;
+  --foreground: #1e293b;
+  --card: #ffffff;
+  --card-foreground: #1e293b;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #334155;
+  --muted: #f4f4f5;
+  --muted-foreground: #64748b;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #64748b;
+
+  font-size: 17px;
+}
+
+.member-app h1,
+.member-app h2,
+.member-app h3,
+.member-app h4 {
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  letter-spacing: -0.01em;
 }

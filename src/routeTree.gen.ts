@@ -12,7 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AccountRouteImport } from './routes/account'
-import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as CartRouteImport } from './routes/cart'
 import { Route as ConfirmationRouteImport } from './routes/confirmation'
 import { Route as ContactRouteImport } from './routes/contact'
@@ -25,6 +25,12 @@ import { Route as PlansRouteImport } from './routes/plans'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminBatchesRouteImport } from './routes/admin/batches'
+import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
+import { Route as AdminKitchenRouteImport } from './routes/admin/kitchen'
+import { Route as AdminOrdersRouteImport } from './routes/admin/orders'
+import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as FeedbackOrderIdRouteImport } from './routes/feedback.$orderId'
 import { Route as PlansCategoryIdRouteImport } from './routes/plans.$categoryId'
@@ -44,7 +50,7 @@ const AccountRoute = AccountRouteImport.update({
   path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminRoute = AdminRouteImport.update({
+const AdminRouteRoute = AdminRouteRouteImport.update({
   id: '/admin',
   path: '/admin',
   getParentRoute: () => rootRouteImport,
@@ -109,6 +115,36 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminBatchesRoute = AdminBatchesRouteImport.update({
+  id: '/batches',
+  path: '/batches',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminCustomersRoute = AdminCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminKitchenRoute = AdminKitchenRouteImport.update({
+  id: '/kitchen',
+  path: '/kitchen',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminOrdersRoute = AdminOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
@@ -127,9 +163,9 @@ const PlansCategoryIdRoute = PlansCategoryIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteRouteWithChildren
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
-  '/admin': typeof AdminRoute
   '/cart': typeof CartRoute
   '/confirmation': typeof ConfirmationRoute
   '/contact': typeof ContactRoute
@@ -142,15 +178,20 @@ export interface FileRoutesByFullPath {
   '/review': typeof ReviewRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/admin/batches': typeof AdminBatchesRoute
+  '/admin/customers': typeof AdminCustomersRoute
+  '/admin/kitchen': typeof AdminKitchenRoute
+  '/admin/orders': typeof AdminOrdersRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/api/health': typeof ApiHealthRoute
   '/feedback/$orderId': typeof FeedbackOrderIdRoute
   '/plans/$categoryId': typeof PlansCategoryIdRoute
+  '/admin/': typeof AdminIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
-  '/admin': typeof AdminRoute
   '/cart': typeof CartRoute
   '/confirmation': typeof ConfirmationRoute
   '/contact': typeof ContactRoute
@@ -163,16 +204,22 @@ export interface FileRoutesByTo {
   '/review': typeof ReviewRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/admin/batches': typeof AdminBatchesRoute
+  '/admin/customers': typeof AdminCustomersRoute
+  '/admin/kitchen': typeof AdminKitchenRoute
+  '/admin/orders': typeof AdminOrdersRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/api/health': typeof ApiHealthRoute
   '/feedback/$orderId': typeof FeedbackOrderIdRoute
   '/plans/$categoryId': typeof PlansCategoryIdRoute
+  '/admin': typeof AdminIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteRouteWithChildren
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
-  '/admin': typeof AdminRoute
   '/cart': typeof CartRoute
   '/confirmation': typeof ConfirmationRoute
   '/contact': typeof ContactRoute
@@ -185,17 +232,23 @@ export interface FileRoutesById {
   '/review': typeof ReviewRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/admin/batches': typeof AdminBatchesRoute
+  '/admin/customers': typeof AdminCustomersRoute
+  '/admin/kitchen': typeof AdminKitchenRoute
+  '/admin/orders': typeof AdminOrdersRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/api/health': typeof ApiHealthRoute
   '/feedback/$orderId': typeof FeedbackOrderIdRoute
   '/plans/$categoryId': typeof PlansCategoryIdRoute
+  '/admin/': typeof AdminIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/about'
     | '/account'
-    | '/admin'
     | '/cart'
     | '/confirmation'
     | '/contact'
@@ -208,15 +261,20 @@ export interface FileRouteTypes {
     | '/review'
     | '/signup'
     | '/sitemap.xml'
+    | '/admin/batches'
+    | '/admin/customers'
+    | '/admin/kitchen'
+    | '/admin/orders'
+    | '/admin/settings'
     | '/api/health'
     | '/feedback/$orderId'
     | '/plans/$categoryId'
+    | '/admin/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/about'
     | '/account'
-    | '/admin'
     | '/cart'
     | '/confirmation'
     | '/contact'
@@ -229,15 +287,21 @@ export interface FileRouteTypes {
     | '/review'
     | '/signup'
     | '/sitemap.xml'
+    | '/admin/batches'
+    | '/admin/customers'
+    | '/admin/kitchen'
+    | '/admin/orders'
+    | '/admin/settings'
     | '/api/health'
     | '/feedback/$orderId'
     | '/plans/$categoryId'
+    | '/admin'
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/about'
     | '/account'
-    | '/admin'
     | '/cart'
     | '/confirmation'
     | '/contact'
@@ -250,16 +314,22 @@ export interface FileRouteTypes {
     | '/review'
     | '/signup'
     | '/sitemap.xml'
+    | '/admin/batches'
+    | '/admin/customers'
+    | '/admin/kitchen'
+    | '/admin/orders'
+    | '/admin/settings'
     | '/api/health'
     | '/feedback/$orderId'
     | '/plans/$categoryId'
+    | '/admin/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRouteRoute: typeof AdminRouteRouteWithChildren
   AboutRoute: typeof AboutRoute
   AccountRoute: typeof AccountRoute
-  AdminRoute: typeof AdminRoute
   CartRoute: typeof CartRoute
   ConfirmationRoute: typeof ConfirmationRoute
   ContactRoute: typeof ContactRoute
@@ -303,7 +373,7 @@ declare module '@tanstack/react-router' {
       id: '/admin'
       path: '/admin'
       fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
+      preLoaderRoute: typeof AdminRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cart': {
@@ -390,6 +460,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/batches': {
+      id: '/admin/batches'
+      path: '/batches'
+      fullPath: '/admin/batches'
+      preLoaderRoute: typeof AdminBatchesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/customers': {
+      id: '/admin/customers'
+      path: '/customers'
+      fullPath: '/admin/customers'
+      preLoaderRoute: typeof AdminCustomersRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/kitchen': {
+      id: '/admin/kitchen'
+      path: '/kitchen'
+      fullPath: '/admin/kitchen'
+      preLoaderRoute: typeof AdminKitchenRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/orders': {
+      id: '/admin/orders'
+      path: '/orders'
+      fullPath: '/admin/orders'
+      preLoaderRoute: typeof AdminOrdersRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/api/health': {
       id: '/api/health'
       path: '/api/health'
@@ -414,6 +526,28 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminRouteRouteChildren {
+  AdminBatchesRoute: typeof AdminBatchesRoute
+  AdminCustomersRoute: typeof AdminCustomersRoute
+  AdminKitchenRoute: typeof AdminKitchenRoute
+  AdminOrdersRoute: typeof AdminOrdersRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminBatchesRoute: AdminBatchesRoute,
+  AdminCustomersRoute: AdminCustomersRoute,
+  AdminKitchenRoute: AdminKitchenRoute,
+  AdminOrdersRoute: AdminOrdersRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
+  AdminRouteRouteChildren,
+)
+
 interface PlansRouteChildren {
   PlansCategoryIdRoute: typeof PlansCategoryIdRoute
 }
@@ -426,9 +560,9 @@ const PlansRouteWithChildren = PlansRoute._addFileChildren(PlansRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRouteRoute: AdminRouteRouteWithChildren,
   AboutRoute: AboutRoute,
   AccountRoute: AccountRoute,
-  AdminRoute: AdminRoute,
   CartRoute: CartRoute,
   ConfirmationRoute: ConfirmationRoute,
   ContactRoute: ContactRoute,

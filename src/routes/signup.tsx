@@ -3,8 +3,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 
 import { signupWithPassword } from "@/auth/auth.functions.server";
-import { BigButton } from "@/components/brand/BigButton";
-import { PageLayout } from "@/components/brand/PageLayout";
+import { MemberLayout } from "@/components/gofofa/MemberLayout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -29,16 +30,22 @@ function SignupPage() {
 
   if (user) {
     return (
-      <PageLayout showBack backTo="/account" backLabel="Account">
-        <div className="rounded-3xl bg-card border-2 border-cream-deep p-5 text-center">
-          <p className="text-navy/80">You are already signed in as {user.name ?? user.email}.</p>
-          <div className="mt-4">
-            <BigButton type="button" onClick={() => navigate({ to: "/account" })}>
+      <MemberLayout showBack backTo="/account" backLabel="Account" wordmarkTo={null}>
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <p className="text-muted-foreground">
+              You are already signed in as {user.name ?? user.email}.
+            </p>
+            <Button
+              type="button"
+              className="mt-4 min-h-11 w-full"
+              onClick={() => navigate({ to: "/account" })}
+            >
               Go to my account
-            </BigButton>
-          </div>
-        </div>
-      </PageLayout>
+            </Button>
+          </CardContent>
+        </Card>
+      </MemberLayout>
     );
   }
 
@@ -64,87 +71,83 @@ function SignupPage() {
   }
 
   return (
-    <PageLayout showBack backTo="/" backLabel="Home">
-      <header className="text-center mb-6">
-        <p className="inline-block rounded-full bg-gold-soft px-4 py-1 text-sm font-semibold text-navy">
-          Join GOFOFA
-        </p>
-        <h1 className="mt-3 text-4xl font-display font-semibold text-navy">Create account</h1>
-        <p className="mt-3 text-lg text-navy/85">
-          Set up your account for weekly meal prep ordering.
-        </p>
+    <MemberLayout showBack backTo="/" backLabel="Home" wordmarkTo={null}>
+      <header className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Create account</h1>
+        <p className="mt-2 text-muted-foreground">Set up your GOFOFA weekly meal membership.</p>
       </header>
 
-      <form
-        onSubmit={handleSubmit}
-        className="rounded-3xl bg-card border-2 border-cream-deep p-5 space-y-4"
-      >
-        <div className="space-y-2">
-          <Label htmlFor="name" className="text-navy font-semibold">
-            Name <span className="font-normal text-navy/60">(optional)</span>
-          </Label>
-          <Input
-            id="name"
-            name="name"
-            type="text"
-            autoComplete="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="min-h-12 rounded-xl border-2 border-cream-deep text-base"
-          />
-        </div>
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg">Join GOFOFA</CardTitle>
+          <CardDescription>Weekly meals from Table and Grace.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">
+                Name <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="name"
+                name="name"
+                type="text"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="min-h-11 text-base"
+              />
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="email" className="text-navy font-semibold">
-            Email
-          </Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="min-h-12 rounded-xl border-2 border-cream-deep text-base"
-          />
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="min-h-11 text-base"
+              />
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="password" className="text-navy font-semibold">
-            Password
-          </Label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="min-h-12 rounded-xl border-2 border-cream-deep text-base"
-          />
-          <p className="text-xs text-navy/60">At least 8 characters.</p>
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="min-h-11 text-base"
+              />
+              <p className="text-xs text-muted-foreground">At least 8 characters.</p>
+            </div>
 
-        {error ? (
-          <p className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-800">
-            {error}
-          </p>
-        ) : null}
+            {error ? (
+              <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
 
-        <BigButton type="submit" disabled={submitting}>
-          {submitting ? "Creating account…" : "Create account"}
-        </BigButton>
-      </form>
+            <Button type="submit" className="min-h-11 w-full" disabled={submitting}>
+              {submitting ? "Creating account…" : "Create account"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-      <p className="mt-6 text-center text-sm text-navy/80">
+      <p className="mt-6 text-center text-sm text-muted-foreground">
         Already have an account?{" "}
-        <Link to="/login" className="font-semibold text-navy underline underline-offset-4">
+        <Link to="/login" className="font-medium text-foreground underline underline-offset-4">
           Log in
         </Link>
       </p>
-    </PageLayout>
+    </MemberLayout>
   );
 }

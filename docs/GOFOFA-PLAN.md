@@ -13,6 +13,20 @@ GOFOFA is the meal-prep weekly membership and order-batching ecommerce backend f
 | Payments         | Stripe (saved cards, off-session variable weekly charges) |
 | Roles            | `customer`, `admin`                                       |
 
+## Design shells (Phase 1 layout pass)
+
+Three visual scopes — marketing pages keep the existing Table and Grace `PageLayout` unchanged.
+
+| Scope     | Routes                          | Shell                             | Tokens                                 |
+| --------- | ------------------------------- | --------------------------------- | -------------------------------------- |
+| Marketing | `/`, `/about`, `/plans`, …      | `PageLayout`                      | Global `:root` brand (cream/navy/gold) |
+| Member    | `/login`, `/signup`, `/account` | `MemberLayout` + `GofofaWordmark` | `.member-app` in `styles.css`          |
+| Admin ops | `/admin/*`                      | `AdminLayout` (sidebar + topbar)  | `.admin-app` in `styles.css`           |
+
+**Brand split:** Table and Grace on public SEO pages; GOFOFA wordmark + “weekly meals from Table and Grace” on member auth/account. Admin uses neutral slate ops styling (shadcn `Table`, `Card`, `Button` — no consumer `BigButton` / pill marketing patterns).
+
+**Admin IA (stub routes):** Dashboard, Batches, Orders, Kitchen, Customers, Settings — data wiring lands in Phase 3–4.
+
 ## Phase 0 — Foundation (this pass)
 
 - [x] Drizzle + MySQL schema scaffold (full domain tables)
@@ -26,11 +40,12 @@ GOFOFA is the meal-prep weekly membership and order-batching ecommerce backend f
 
 ## Phase 1 — Auth & sessions
 
-- [ ] Email/password or magic-link sign-up and login
-- [ ] Session cookie middleware (TanStack Start server middleware)
-- [ ] `requireAuth` / `requireRole('admin')` helpers
-- [ ] Account page wired to real user data (replace mock Margaret Wilson)
-- [ ] Admin route guard shell
+- [x] Email/password sign-up and login
+- [x] Session cookie middleware (TanStack Start server middleware)
+- [x] `requireAuth` / `requireRole('admin')` helpers
+- [x] Account page wired to real user data (replace mock Margaret Wilson)
+- [x] Admin route guard shell
+- [x] Admin + member layout shells (see Design shells above)
 
 ## Phase 2 — Membership & Stripe
 
