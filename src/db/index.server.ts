@@ -1,15 +1,22 @@
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 
+import { getServerEnv, hasCoreServerEnv } from "@/env.server";
+
 import * as schema from "./schema";
 
 let pool: mysql.Pool | undefined;
 let db: MySql2Database<typeof schema> | undefined;
 
 function getDatabaseUrl(): string {
+  if (hasCoreServerEnv()) {
+    return getServerEnv().DATABASE_URL;
+  }
   const url = process.env.DATABASE_URL;
   if (!url) {
-    throw new Error("DATABASE_URL is not set. Copy .env.example and configure MySQL.");
+    throw new Error(
+      "DATABASE_URL is not set. Copy .env.example and configure MySQL, or set env vars in Buddy/CloudPanel.",
+    );
   }
   return url;
 }

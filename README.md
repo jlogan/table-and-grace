@@ -19,7 +19,8 @@ MySQL 8+ with Drizzle ORM. Copy the example env file and apply migrations:
 
 ```bash
 cp .env.example .env
-# edit DATABASE_URL
+# edit DATABASE_URL, AUTH_SECRET, APP_URL
+npm run env:validate   # optional: verify required vars
 npm run db:migrate
 ```
 

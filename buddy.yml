@@ -21,6 +21,13 @@
 #        STAGING_PM2_NAME    PM2 process name for this site
 #        STAGING_APP_PORT    local app port Node listens on
 #        STAGING_SITE_URL    public staging URL to health-check (e.g. https://tag.ourstagingserver.com)
+#        DATABASE_URL        MySQL connection string used by Drizzle/app runtime
+#        AUTH_SECRET         32+ char auth/session signing secret
+#        APP_URL             canonical app URL for links/redirects
+#   4. Add later phase encrypted project variables only when wired:
+#        STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PUBLISHABLE_KEY,
+#        RESEND_API_KEY, RESEND_FROM_EMAIL, TWILIO_ACCOUNT_SID,
+#        TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, CRON_SECRET
 
 - pipeline: "Deploy To Staging"
   name: "Deploy To Staging"
@@ -126,6 +133,21 @@
         export PORT="$STAGING_APP_PORT"
         export NITRO_HOST=127.0.0.1
         export NITRO_PORT="$STAGING_APP_PORT"
+        export DATABASE_URL="$DATABASE_URL"
+        export AUTH_SECRET="$AUTH_SECRET"
+        export APP_URL="$APP_URL"
+        export STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY:-}"
+        export STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-}"
+        export STRIPE_PUBLISHABLE_KEY="${STRIPE_PUBLISHABLE_KEY:-}"
+        export RESEND_API_KEY="${RESEND_API_KEY:-}"
+        export RESEND_FROM_EMAIL="${RESEND_FROM_EMAIL:-}"
+        export TWILIO_ACCOUNT_SID="${TWILIO_ACCOUNT_SID:-}"
+        export TWILIO_AUTH_TOKEN="${TWILIO_AUTH_TOKEN:-}"
+        export TWILIO_FROM_NUMBER="${TWILIO_FROM_NUMBER:-}"
+        export CRON_SECRET="${CRON_SECRET:-}"
+
+        npm run env:validate
+        npm run db:migrate
 
         pm2 start index.mjs --name "$PM2_NAME" --cwd "$STAGING_DEPLOY_PATH/.output/server" --update-env
         pm2 save || true

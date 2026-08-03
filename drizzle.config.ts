@@ -5,6 +5,7 @@ export default defineConfig({
   schema: "./src/db/schema/index.ts",
   out: "./drizzle",
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? "mysql://root:password@127.0.0.1:3306/gofofa",
+    // drizzle-kit generate reads schema only; migrate requires DATABASE_URL at runtime.
+    url: process.env.DATABASE_URL ?? "mysql://127.0.0.1:3306/gofofa",
   },
 });
