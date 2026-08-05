@@ -1,6 +1,6 @@
 import { mysqlEnum, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
 
-import { users } from "./users";
+import { users } from "./users.ts";
 
 export const magicLinkPurposes = ["login", "signup", "verify_email"] as const;
 export type MagicLinkPurpose = (typeof magicLinkPurposes)[number];

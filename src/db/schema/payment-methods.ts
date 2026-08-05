@@ -1,6 +1,6 @@
 import { boolean, int, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
 
-import { users } from "./users";
+import { users } from "./users.ts";
 
 export const paymentMethods = mysqlTable("payment_methods", {
   id: varchar("id", { length: 36 }).primaryKey(),

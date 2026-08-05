@@ -1,14 +1,16 @@
 import { int, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
-import { weeklyBatches } from "./weekly-batches";
+import { menuItems } from "./menu-items.ts";
+import { weeklyBatches } from "./weekly-batches.ts";
 
 export const batchItems = mysqlTable("batch_items", {
   id: varchar("id", { length: 36 }).primaryKey(),
   batchId: varchar("batch_id", { length: 36 })
     .notNull()
     .references(() => weeklyBatches.id, { onDelete: "cascade" }),
-  /** References menu catalog (seeded in a later phase). */
-  menuItemId: varchar("menu_item_id", { length: 36 }).notNull(),
+  menuItemId: varchar("menu_item_id", { length: 36 })
+    .notNull()
+    .references(() => menuItems.id, { onDelete: "restrict" }),
   qtyCooked: int("qty_cooked").notNull().default(0),
   qtyRemaining: int("qty_remaining").notNull().default(0),
   internalNote: text("internal_note"),

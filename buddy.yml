@@ -148,6 +148,7 @@
 
         npm run env:validate
         npm run db:migrate
+        npm run db:seed
 
         pm2 start index.mjs --name "$PM2_NAME" --cwd "$STAGING_DEPLOY_PATH/.output/server" --update-env
         pm2 save || true

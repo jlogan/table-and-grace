@@ -15,6 +15,13 @@
       "when": 1785713479404,
       "tag": "0002_glorious_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1785936904476,
+      "tag": "0002_brave_zarda",
+      "breakpoints": true
     }
   ]
 }

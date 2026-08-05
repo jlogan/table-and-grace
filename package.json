@@ -24,7 +24,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:promote-admin": "node --experimental-strip-types scripts/promote-admin.ts"
+    "db:promote-admin": "node --experimental-strip-types scripts/promote-admin.ts",
+    "db:seed": "node --experimental-strip-types scripts/seed-catalog.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -1,7 +1,7 @@
 import { mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
-import { users } from "./users";
-import { weeklyOrders } from "./weekly-orders";
+import { users } from "./users.ts";
+import { weeklyOrders } from "./weekly-orders.ts";
 
 export const commentVisibilities = ["customer", "internal"] as const;
 export type CommentVisibility = (typeof commentVisibilities)[number];

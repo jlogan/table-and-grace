@@ -1,6 +1,7 @@
 import { int, mysqlEnum, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
 
-import { weeklyOrders } from "./weekly-orders";
+import { menuItems } from "./menu-items.ts";
+import { weeklyOrders } from "./weekly-orders.ts";
 
 export const orderLineSources = [
   "recurring",
@@ -18,7 +19,9 @@ export const orderLines = mysqlTable("order_lines", {
   orderId: varchar("order_id", { length: 36 })
     .notNull()
     .references(() => weeklyOrders.id, { onDelete: "cascade" }),
-  menuItemId: varchar("menu_item_id", { length: 36 }).notNull(),
+  menuItemId: varchar("menu_item_id", { length: 36 })
+    .notNull()
+    .references(() => menuItems.id, { onDelete: "restrict" }),
   portion: mysqlEnum("portion", portions).notNull().default("6oz"),
   qty: int("qty").notNull().default(1),
   unitPriceCents: int("unit_price_cents").notNull().default(0),

@@ -1,9 +1,9 @@
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 
-import { getServerEnv, hasCoreServerEnv } from "@/env.server";
+import { getServerEnv, hasCoreServerEnv } from "../env.server.ts";
 
-import * as schema from "./schema";
+import * as schema from "./schema/index.ts";
 
 let pool: mysql.Pool | undefined;
 let db: MySql2Database<typeof schema> | undefined;

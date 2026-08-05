@@ -8,8 +8,11 @@ import {
   varchar,
 } from "drizzle-orm/mysql-core";
 
-import { users } from "./users";
-import { weeklyBatches } from "./weekly-batches";
+import { billingCycles } from "./billing-cycles.ts";
+import { paymentSchedules } from "./payment-schedules.ts";
+import { pickupWindows } from "./pickup-windows.ts";
+import { users } from "./users.ts";
+import { weeklyBatches } from "./weekly-batches.ts";
 
 export const orderStatuses = [
   "draft",
@@ -35,7 +38,16 @@ export const weeklyOrders = mysqlTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     status: mysqlEnum("status", orderStatuses).notNull().default("draft"),
-    pickupWindowId: varchar("pickup_window_id", { length: 36 }),
+    pickupWindowId: varchar("pickup_window_id", { length: 36 }).references(() => pickupWindows.id, {
+      onDelete: "set null",
+    }),
+    /** Frozen from customer profile at approval time. */
+    paymentScheduleSnapshot: mysqlEnum("payment_schedule_snapshot", paymentSchedules),
+    /** When this order becomes chargeable (batch schedule or monthly anchor). */
+    chargeDueAt: timestamp("charge_due_at"),
+    billingCycleId: varchar("billing_cycle_id", { length: 36 }).references(() => billingCycles.id, {
+      onDelete: "set null",
+    }),
     subtotalCents: int("subtotal_cents").notNull().default(0),
     taxCents: int("tax_cents").notNull().default(0),
     totalCents: int("total_cents").notNull().default(0),

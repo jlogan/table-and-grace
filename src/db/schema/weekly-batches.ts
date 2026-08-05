@@ -8,6 +8,8 @@ import {
   varchar,
 } from "drizzle-orm/mysql-core";
 
+import { pickupWindows } from "./pickup-windows.ts";
+
 export const batchStatuses = [
   "planning",
   "draft",
@@ -24,7 +26,9 @@ export const weeklyBatches = mysqlTable(
     id: varchar("id", { length: 36 }).primaryKey(),
     weekStart: date("week_start").notNull(),
     pickupDate: date("pickup_date"),
-    pickupWindowId: varchar("pickup_window_id", { length: 36 }),
+    pickupWindowId: varchar("pickup_window_id", { length: 36 }).references(() => pickupWindows.id, {
+      onDelete: "set null",
+    }),
     status: mysqlEnum("status", batchStatuses).notNull().default("planning"),
     chefInternalNotes: text("chef_internal_notes"),
     reviewDeadline: timestamp("review_deadline"),

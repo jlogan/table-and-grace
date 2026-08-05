@@ -1,6 +1,6 @@
 import { mysqlEnum, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
 
-import { users } from "./users";
+import { users } from "./users.ts";
 
 export const membershipStatuses = ["active", "paused", "cancelled"] as const;
 export type MembershipStatus = (typeof membershipStatuses)[number];

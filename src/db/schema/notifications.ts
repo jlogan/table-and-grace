@@ -1,7 +1,7 @@
 import { json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
-import { users } from "./users";
-import { weeklyOrders } from "./weekly-orders";
+import { users } from "./users.ts";
+import { weeklyOrders } from "./weekly-orders.ts";
 
 export const notificationChannels = ["email", "sms"] as const;
 export type NotificationChannel = (typeof notificationChannels)[number];
