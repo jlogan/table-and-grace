@@ -29,11 +29,13 @@ import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminBatchesRouteImport } from './routes/admin/batches'
 import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
 import { Route as AdminKitchenRouteImport } from './routes/admin/kitchen'
+import { Route as AdminMembershipsRouteImport } from './routes/admin/memberships'
 import { Route as AdminOrdersRouteImport } from './routes/admin/orders'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as FeedbackOrderIdRouteImport } from './routes/feedback.$orderId'
 import { Route as PlansCategoryIdRouteImport } from './routes/plans.$categoryId'
+import { Route as AccountOrdersOrderIdRouteImport } from './routes/account.orders.$orderId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -135,6 +137,11 @@ const AdminKitchenRoute = AdminKitchenRouteImport.update({
   path: '/kitchen',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminMembershipsRoute = AdminMembershipsRouteImport.update({
+  id: '/memberships',
+  path: '/memberships',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminOrdersRoute = AdminOrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
@@ -160,12 +167,17 @@ const PlansCategoryIdRoute = PlansCategoryIdRouteImport.update({
   path: '/$categoryId',
   getParentRoute: () => PlansRoute,
 } as any)
+const AccountOrdersOrderIdRoute = AccountOrdersOrderIdRouteImport.update({
+  id: '/orders/$orderId',
+  path: '/orders/$orderId',
+  getParentRoute: () => AccountRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
   '/about': typeof AboutRoute
-  '/account': typeof AccountRoute
+  '/account': typeof AccountRouteWithChildren
   '/cart': typeof CartRoute
   '/confirmation': typeof ConfirmationRoute
   '/contact': typeof ContactRoute
@@ -181,17 +193,19 @@ export interface FileRoutesByFullPath {
   '/admin/batches': typeof AdminBatchesRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/kitchen': typeof AdminKitchenRoute
+  '/admin/memberships': typeof AdminMembershipsRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/api/health': typeof ApiHealthRoute
   '/feedback/$orderId': typeof FeedbackOrderIdRoute
   '/plans/$categoryId': typeof PlansCategoryIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/account/orders/$orderId': typeof AccountOrdersOrderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/account': typeof AccountRoute
+  '/account': typeof AccountRouteWithChildren
   '/cart': typeof CartRoute
   '/confirmation': typeof ConfirmationRoute
   '/contact': typeof ContactRoute
@@ -207,19 +221,21 @@ export interface FileRoutesByTo {
   '/admin/batches': typeof AdminBatchesRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/kitchen': typeof AdminKitchenRoute
+  '/admin/memberships': typeof AdminMembershipsRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/api/health': typeof ApiHealthRoute
   '/feedback/$orderId': typeof FeedbackOrderIdRoute
   '/plans/$categoryId': typeof PlansCategoryIdRoute
   '/admin': typeof AdminIndexRoute
+  '/account/orders/$orderId': typeof AccountOrdersOrderIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
   '/about': typeof AboutRoute
-  '/account': typeof AccountRoute
+  '/account': typeof AccountRouteWithChildren
   '/cart': typeof CartRoute
   '/confirmation': typeof ConfirmationRoute
   '/contact': typeof ContactRoute
@@ -235,12 +251,14 @@ export interface FileRoutesById {
   '/admin/batches': typeof AdminBatchesRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/kitchen': typeof AdminKitchenRoute
+  '/admin/memberships': typeof AdminMembershipsRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/api/health': typeof ApiHealthRoute
   '/feedback/$orderId': typeof FeedbackOrderIdRoute
   '/plans/$categoryId': typeof PlansCategoryIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/account/orders/$orderId': typeof AccountOrdersOrderIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -264,12 +282,14 @@ export interface FileRouteTypes {
     | '/admin/batches'
     | '/admin/customers'
     | '/admin/kitchen'
+    | '/admin/memberships'
     | '/admin/orders'
     | '/admin/settings'
     | '/api/health'
     | '/feedback/$orderId'
     | '/plans/$categoryId'
     | '/admin/'
+    | '/account/orders/$orderId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -290,12 +310,14 @@ export interface FileRouteTypes {
     | '/admin/batches'
     | '/admin/customers'
     | '/admin/kitchen'
+    | '/admin/memberships'
     | '/admin/orders'
     | '/admin/settings'
     | '/api/health'
     | '/feedback/$orderId'
     | '/plans/$categoryId'
     | '/admin'
+    | '/account/orders/$orderId'
   id:
     | '__root__'
     | '/'
@@ -317,19 +339,21 @@ export interface FileRouteTypes {
     | '/admin/batches'
     | '/admin/customers'
     | '/admin/kitchen'
+    | '/admin/memberships'
     | '/admin/orders'
     | '/admin/settings'
     | '/api/health'
     | '/feedback/$orderId'
     | '/plans/$categoryId'
     | '/admin/'
+    | '/account/orders/$orderId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRouteRoute: typeof AdminRouteRouteWithChildren
   AboutRoute: typeof AboutRoute
-  AccountRoute: typeof AccountRoute
+  AccountRoute: typeof AccountRouteWithChildren
   CartRoute: typeof CartRoute
   ConfirmationRoute: typeof ConfirmationRoute
   ContactRoute: typeof ContactRoute
@@ -488,6 +512,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminKitchenRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/memberships': {
+      id: '/admin/memberships'
+      path: '/memberships'
+      fullPath: '/admin/memberships'
+      preLoaderRoute: typeof AdminMembershipsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/orders': {
       id: '/admin/orders'
       path: '/orders'
@@ -523,6 +554,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlansCategoryIdRouteImport
       parentRoute: typeof PlansRoute
     }
+    '/account/orders/$orderId': {
+      id: '/account/orders/$orderId'
+      path: '/orders/$orderId'
+      fullPath: '/account/orders/$orderId'
+      preLoaderRoute: typeof AccountOrdersOrderIdRouteImport
+      parentRoute: typeof AccountRoute
+    }
   }
 }
 
@@ -530,6 +568,7 @@ interface AdminRouteRouteChildren {
   AdminBatchesRoute: typeof AdminBatchesRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminKitchenRoute: typeof AdminKitchenRoute
+  AdminMembershipsRoute: typeof AdminMembershipsRoute
   AdminOrdersRoute: typeof AdminOrdersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -539,6 +578,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminBatchesRoute: AdminBatchesRoute,
   AdminCustomersRoute: AdminCustomersRoute,
   AdminKitchenRoute: AdminKitchenRoute,
+  AdminMembershipsRoute: AdminMembershipsRoute,
   AdminOrdersRoute: AdminOrdersRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminIndexRoute: AdminIndexRoute,
@@ -547,6 +587,17 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
   AdminRouteRouteChildren,
 )
+
+interface AccountRouteChildren {
+  AccountOrdersOrderIdRoute: typeof AccountOrdersOrderIdRoute
+}
+
+const AccountRouteChildren: AccountRouteChildren = {
+  AccountOrdersOrderIdRoute: AccountOrdersOrderIdRoute,
+}
+
+const AccountRouteWithChildren =
+  AccountRoute._addFileChildren(AccountRouteChildren)
 
 interface PlansRouteChildren {
   PlansCategoryIdRoute: typeof PlansCategoryIdRoute
@@ -562,7 +613,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRouteRoute: AdminRouteRouteWithChildren,
   AboutRoute: AboutRoute,
-  AccountRoute: AccountRoute,
+  AccountRoute: AccountRouteWithChildren,
   CartRoute: CartRoute,
   ConfirmationRoute: ConfirmationRoute,
   ContactRoute: ContactRoute,

@@ -12,10 +12,15 @@ interface GofofaLandingLayoutProps {
   showBack?: boolean;
   backTo?: string;
   backLabel?: string;
-  /** Wider max-width for landing page sections */
+  /** Wider max-width for landing page sections (desktop-friendly). */
   wide?: boolean;
   className?: string;
 }
+
+const contentMaxWidth = {
+  default: "max-w-2xl",
+  wide: "max-w-6xl",
+} as const;
 
 export function GofofaLandingLayout({
   children,
@@ -25,10 +30,14 @@ export function GofofaLandingLayout({
   wide = false,
   className,
 }: GofofaLandingLayoutProps) {
+  const maxW = wide ? contentMaxWidth.wide : contentMaxWidth.default;
+
   return (
     <div className={cn("gofofa-app min-h-dvh flex flex-col bg-background", className)}>
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
+        <div
+          className={cn("mx-auto flex items-center justify-between gap-3 px-4 py-3 lg:px-8", maxW)}
+        >
           {showBack ? (
             <Link
               to={backTo}
@@ -45,35 +54,66 @@ export function GofofaLandingLayout({
             <GofofaLink
               to="/signup"
               variant="primary"
-              className="hidden min-h-11 w-auto px-4 text-sm sm:inline-flex"
+              className="hidden min-h-11 w-auto px-5 text-sm sm:inline-flex"
             >
-              Join GOFOFA
+              Start your meal plan
             </GofofaLink>
             <GofofaNavMenu />
           </div>
         </div>
       </header>
 
-      <main className="flex-1">
-        <div className={cn("mx-auto px-4 py-6", wide ? "max-w-3xl" : "max-w-2xl")}>{children}</div>
-      </main>
+      <main className="flex-1">{children}</main>
 
-      <GofofaHelpFooter />
+      <GofofaHelpFooter wide={wide} />
     </div>
   );
 }
 
-function GofofaHelpFooter() {
+/** Centers landing content at a readable max width. Use inside `<main>` for standard sections. */
+export function GofofaLandingSection({
+  children,
+  wide = false,
+  className,
+  bleed = false,
+}: {
+  children: ReactNode;
+  wide?: boolean;
+  className?: string;
+  /** Break out to full viewport width while keeping inner padding. */
+  bleed?: boolean;
+}) {
+  const maxW = wide ? contentMaxWidth.wide : contentMaxWidth.default;
+
+  if (bleed) {
+    return (
+      <div className={cn("w-full", className)}>
+        <div className={cn("mx-auto px-4 py-6 lg:px-8", maxW)}>{children}</div>
+      </div>
+    );
+  }
+
+  return <div className={cn("mx-auto px-4 py-6 lg:px-8", maxW, className)}>{children}</div>;
+}
+
+function GofofaHelpFooter({ wide }: { wide?: boolean }) {
+  const maxW = wide ? contentMaxWidth.wide : contentMaxWidth.default;
+
   return (
-    <footer className="mt-8 border-t-2 border-border bg-secondary">
-      <div className="mx-auto flex max-w-3xl flex-col items-start justify-between gap-4 px-4 py-6 sm:flex-row sm:items-center">
+    <footer className="mt-4 border-t-2 border-border bg-secondary">
+      <div
+        className={cn(
+          "mx-auto flex flex-col items-start justify-between gap-6 px-4 py-8 lg:px-8 sm:flex-row sm:items-center",
+          maxW,
+        )}
+      >
         <div>
           <GofofaWordmark to="/" size="sm" className="mb-2" />
           <p className="text-sm text-muted-foreground">
             Weekly meals from Table and Grace · Acworth · Canton · Woodstock
           </p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[16rem]">
           <GofofaLink to="/signup" variant="primary" className="min-h-12 text-sm">
             Create your GOFOFA account
           </GofofaLink>

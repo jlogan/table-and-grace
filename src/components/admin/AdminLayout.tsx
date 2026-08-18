@@ -4,6 +4,7 @@ import {
   ChefHat,
   LayoutDashboard,
   Package,
+  Repeat,
   Settings,
   ShoppingBag,
   Users,
@@ -42,6 +43,7 @@ const adminNavItems: Array<{
   { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
   { to: "/admin/kitchen", label: "Kitchen", icon: ChefHat },
   { to: "/admin/customers", label: "Customers", icon: Users },
+  { to: "/admin/memberships", label: "Memberships", icon: Repeat },
   { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
@@ -117,7 +119,7 @@ export function AdminLayout({ children, user, title, description }: AdminLayoutP
                 ) : null}
               </>
             ) : (
-              <p className="text-sm font-medium text-muted-foreground">Batch week · placeholder</p>
+              <p className="text-sm font-medium text-muted-foreground">GOFOFA operations</p>
             )}
           </div>
           <div className="hidden items-center gap-2 sm:flex">

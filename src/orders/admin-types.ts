@@ -1,0 +1,149 @@
+import type { PortionDefault } from "@/db/schema/customer-profiles.ts";
+import type { MembershipStatus } from "@/db/schema/memberships.ts";
+import type { PaymentSchedule } from "@/db/schema/payment-schedules.ts";
+import type { UserRole } from "@/db/schema/users.ts";
+import type { BatchStatus } from "@/db/schema/weekly-batches.ts";
+import type { OrderStatus } from "@/db/schema/weekly-orders.ts";
+
+export type AdminBatchSummary = {
+  id: string;
+  weekStart: string;
+  pickupDate: string | null;
+  status: BatchStatus;
+  reviewDeadline: string | null;
+  chargeScheduledAt: string | null;
+  pickupWindowLabel: string | null;
+  orderCount: number;
+  itemCount: number;
+};
+
+export type AdminMenuItemOption = {
+  id: string;
+  name: string;
+  note: string | null;
+};
+
+export type AdminBatchInventoryRow = {
+  batchItemId: string | null;
+  menuItemId: string;
+  menuItemName: string;
+  qtyCooked: number;
+  qtyRemaining: number;
+};
+
+export type AdminPickupWindowOption = {
+  id: string;
+  label: string;
+};
+
+export type AdminOrderRow = {
+  id: string;
+  batchId: string;
+  batchWeekStart: string;
+  customerName: string | null;
+  customerEmail: string;
+  status: OrderStatus;
+  paymentSchedule: PaymentSchedule;
+  totalCents: number;
+  itemCount: number;
+  pickupLabel: string | null;
+  customerVisibleNote: string | null;
+  reviewDeadline: string | null;
+};
+
+export function formatBatchStatus(status: BatchStatus): string {
+  const labels: Record<BatchStatus, string> = {
+    planning: "Planning",
+    draft: "Draft",
+    pending_customer_review: "Customer review",
+    approved: "Approved",
+    charging: "Charging",
+    closed: "Closed",
+  };
+  return labels[status] ?? status;
+}
+
+export function batchStatusBadgeVariant(
+  status: BatchStatus,
+): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "pending_customer_review") return "default";
+  if (status === "planning" || status === "draft") return "outline";
+  if (status === "closed") return "secondary";
+  return "secondary";
+}
+
+export type AdminPlanCategoryOption = {
+  slug: string;
+  name: string;
+};
+
+export type AdminCustomerRow = {
+  userId: string;
+  email: string;
+  name: string | null;
+  role: UserRole;
+  createdAt: string;
+  membershipId: string | null;
+  membershipStatus: MembershipStatus | null;
+  paymentSchedule: PaymentSchedule;
+  portionDefault: PortionDefault;
+  defaultPickupWindowId: string | null;
+  pickupLabel: string | null;
+  chefNotes: string | null;
+  planSlug: string | null;
+  planName: string | null;
+  mealsPerWeek: number | null;
+  orderCount: number;
+};
+
+export type AdminMembershipRow = {
+  userId: string;
+  email: string;
+  name: string | null;
+  membershipId: string | null;
+  membershipStatus: MembershipStatus;
+  paymentSchedule: PaymentSchedule;
+  portionDefault: PortionDefault;
+  pickupLabel: string | null;
+  planSlug: string | null;
+  planName: string | null;
+  mealsPerWeek: number | null;
+  chefNotes: string | null;
+};
+
+export type BatchMealDemandRow = {
+  menuItemId: string;
+  menuItemName: string;
+  qtyNeeded: number;
+  qtyCooked: number;
+  qtyRemaining: number;
+};
+
+export type AdminDashboardOverview = {
+  currentBatch: AdminBatchSummary | null;
+  reviewQueueCount: number;
+  activeMemberCount: number;
+  customerCount: number;
+  recentOrders: AdminOrderRow[];
+  prepTotals: BatchMealDemandRow[];
+  upcomingCustomers: AdminMembershipRow[];
+};
+
+export function membershipStatusBadgeVariant(
+  status: MembershipStatus | null,
+): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "active") return "default";
+  if (status === "paused") return "outline";
+  if (status === "cancelled") return "secondary";
+  return "secondary";
+}
+
+export function formatMembershipStatus(status: MembershipStatus | null): string {
+  if (!status) return "No membership";
+  const labels: Record<MembershipStatus, string> = {
+    active: "Active",
+    paused: "Paused",
+    cancelled: "Cancelled",
+  };
+  return labels[status] ?? status;
+}
