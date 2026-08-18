@@ -3,10 +3,10 @@ import mysql from "mysql2/promise";
 
 import { getServerEnv, hasCoreServerEnv } from "../env.server.ts";
 
-import * as schema from "./schema/index.ts";
+import { drizzleSchema } from "./schema/drizzle.ts";
 
 let pool: mysql.Pool | undefined;
-let db: MySql2Database<typeof schema> | undefined;
+let db: MySql2Database<typeof drizzleSchema> | undefined;
 
 function getDatabaseUrl(): string {
   if (hasCoreServerEnv()) {
@@ -22,10 +22,10 @@ function getDatabaseUrl(): string {
 }
 
 /** Server-only Drizzle client. Lazily connects on first use. */
-export function getDb(): MySql2Database<typeof schema> {
+export function getDb(): MySql2Database<typeof drizzleSchema> {
   if (!db) {
     pool = mysql.createPool(getDatabaseUrl());
-    db = drizzle(pool, { schema, mode: "default" });
+    db = drizzle(pool, { schema: drizzleSchema, mode: "default" });
   }
   return db;
 }
@@ -38,5 +38,3 @@ export async function closeDb(): Promise<void> {
     db = undefined;
   }
 }
-
-export { schema };
