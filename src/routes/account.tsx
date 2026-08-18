@@ -245,11 +245,24 @@ function OrderSummaryCard({
         <CardContent className="pt-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm text-muted-foreground">Week of {weekLabel}</p>
+              <p className="text-sm text-muted-foreground">
+                {order.receiptNumber ? (
+                  <>
+                    Receipt {order.receiptNumber}
+                    {order.externalOrderNumber ? ` · Order #${order.externalOrderNumber}` : null}
+                  </>
+                ) : (
+                  <>Week of {weekLabel}</>
+                )}
+              </p>
+              {!order.receiptNumber ? null : (
+                <p className="text-sm text-muted-foreground">Week of {weekLabel}</p>
+              )}
               <p className="mt-1 font-medium">{order.pickupLabel ?? "Pickup details pending"}</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {order.itemCount} item{order.itemCount === 1 ? "" : "s"} ·{" "}
                 {centsToLabel(order.totalCents)}
+                {order.tipCents > 0 ? ` (incl. ${centsToLabel(order.tipCents)} tip)` : null}
               </p>
               {order.reviewDeadline && order.needsReview ? (
                 <p className="mt-1 text-sm font-medium text-primary">

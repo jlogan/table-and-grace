@@ -6,11 +6,14 @@ export type CustomerOrderSummary = {
   id: string;
   status: OrderStatus;
   totalCents: number;
+  tipCents: number;
   batchWeekStart: string;
   pickupLabel: string | null;
   reviewDeadline: string | null;
   needsReview: boolean;
   itemCount: number;
+  receiptNumber: string | null;
+  externalOrderNumber: string | null;
 };
 
 export type ReviewOrderLine = {
@@ -55,7 +58,10 @@ export type WeeklyOrderReview = {
     status: OrderStatus;
     subtotalCents: number;
     taxCents: number;
+    tipCents: number;
     totalCents: number;
+    receiptNumber: string | null;
+    externalOrderNumber: string | null;
     paymentScheduleSnapshot: PaymentSchedule | null;
     customerVisibleNote: string | null;
     reviewedAt: string | null;

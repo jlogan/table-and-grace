@@ -50,8 +50,16 @@ export const weeklyOrders = mysqlTable(
     }),
     subtotalCents: int("subtotal_cents").notNull().default(0),
     taxCents: int("tax_cents").notNull().default(0),
+    /** Gratuity from POS receipt; excluded from subtotal/tax, included in totalCents. */
+    tipCents: int("tip_cents").notNull().default(0),
     totalCents: int("total_cents").notNull().default(0),
+    /** GoFofa POS receipt id (e.g. DXba). */
+    receiptNumber: varchar("receipt_number", { length: 32 }),
+    /** External order id when present (e.g. Square order #). */
+    externalOrderNumber: varchar("external_order_number", { length: 64 }),
     customerVisibleNote: text("customer_visible_note"),
+    /** Set when order was imported from historical POS data. */
+    importedAt: timestamp("imported_at"),
     reviewedAt: timestamp("reviewed_at"),
     approvedAt: timestamp("approved_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

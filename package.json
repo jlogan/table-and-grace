@@ -26,7 +26,8 @@
     "db:studio": "drizzle-kit studio",
     "db:promote-admin": "node --experimental-strip-types scripts/promote-admin.ts",
     "db:seed": "node --experimental-strip-types scripts/seed-catalog.ts",
-    "db:seed:review-demo": "node --experimental-strip-types scripts/seed-review-demo.ts"
+    "db:seed:review-demo": "node --experimental-strip-types scripts/seed-review-demo.ts",
+    "db:import:jay-history": "node --experimental-strip-types scripts/import-jay-history.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

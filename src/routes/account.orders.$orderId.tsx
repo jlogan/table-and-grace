@@ -201,6 +201,18 @@ function OrderReviewPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
+          {review.order.receiptNumber ? (
+            <p>
+              <span className="text-muted-foreground">Receipt: </span>
+              {review.order.receiptNumber}
+            </p>
+          ) : null}
+          {review.order.externalOrderNumber ? (
+            <p>
+              <span className="text-muted-foreground">Order #: </span>
+              {review.order.externalOrderNumber}
+            </p>
+          ) : null}
           <p>
             <span className="text-muted-foreground">Payment schedule: </span>
             {formatPaymentSchedule(paymentSchedule)}
@@ -387,11 +399,37 @@ function OrderReviewPage() {
       ) : null}
 
       <Card className="mt-6">
-        <CardContent className="flex items-baseline justify-between pt-6">
-          <span className="text-lg font-medium">Estimated total</span>
-          <span className="text-2xl font-semibold tabular-nums">
-            {centsToLabel(review.canEdit ? draftTotalCents : review.order.totalCents)}
-          </span>
+        <CardContent className="space-y-2 pt-6 text-sm">
+          <div className="flex items-baseline justify-between">
+            <span className="text-muted-foreground">
+              {review.canEdit ? "Estimated subtotal" : "Subtotal"}
+            </span>
+            <span className="tabular-nums">
+              {centsToLabel(review.canEdit ? draftTotalCents : review.order.subtotalCents)}
+            </span>
+          </div>
+          {review.order.taxCents > 0 ? (
+            <div className="flex items-baseline justify-between">
+              <span className="text-muted-foreground">Tax</span>
+              <span className="tabular-nums">{centsToLabel(review.order.taxCents)}</span>
+            </div>
+          ) : null}
+          {review.order.tipCents > 0 ? (
+            <div className="flex items-baseline justify-between">
+              <span className="text-muted-foreground">Tip</span>
+              <span className="tabular-nums">{centsToLabel(review.order.tipCents)}</span>
+            </div>
+          ) : null}
+          <div className="flex items-baseline justify-between border-t pt-2 text-lg font-medium">
+            <span>{review.canEdit ? "Estimated total" : "Total"}</span>
+            <span className="text-2xl font-semibold tabular-nums">
+              {centsToLabel(
+                review.canEdit
+                  ? draftTotalCents + review.order.taxCents + review.order.tipCents
+                  : review.order.totalCents,
+              )}
+            </span>
+          </div>
         </CardContent>
         {paymentSchedule === "manual_per_order" ? (
           <CardContent className="pt-0 text-sm text-muted-foreground">
