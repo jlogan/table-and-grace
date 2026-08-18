@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { format, parseISO } from "date-fns";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDateString } from "@/lib/dates";
 import {
   centsToLabel,
   formatOrderStatus,
@@ -79,7 +79,7 @@ function AdminOrdersPage() {
             <div>
               <CardTitle className="text-base">
                 {selectedBatch
-                  ? `Week of ${format(parseISO(selectedBatch.weekStart), "MMM d, yyyy")}`
+                  ? `Week of ${formatDateString(selectedBatch.weekStart, "MMM d, yyyy")}`
                   : "All batches"}
               </CardTitle>
               <CardDescription>
@@ -96,7 +96,7 @@ function AdminOrdersPage() {
                   <SelectItem value="all">All batches</SelectItem>
                   {batches.map((batch) => (
                     <SelectItem key={batch.id} value={batch.id}>
-                      {format(parseISO(batch.weekStart), "MMM d, yyyy")} ({batch.orderCount})
+                      {formatDateString(batch.weekStart, "MMM d, yyyy")} ({batch.orderCount})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -137,7 +137,7 @@ function AdminOrdersPage() {
                           <div className="text-xs text-muted-foreground">{order.customerEmail}</div>
                         ) : null}
                       </TableCell>
-                      <TableCell>{format(parseISO(order.batchWeekStart), "MMM d")}</TableCell>
+                      <TableCell>{formatDateString(order.batchWeekStart, "MMM d")}</TableCell>
                       <TableCell>
                         <Badge variant={orderStatusBadgeVariant(order.status)}>
                           {formatOrderStatus(order.status)}

@@ -1,5 +1,4 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { format, parseISO } from "date-fns";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDateString } from "@/lib/dates";
 import { batchStatusBadgeVariant, formatBatchStatus } from "@/orders/admin-types";
 import { fetchAdminDashboard } from "@/orders/admin.functions.server";
 
@@ -45,7 +45,7 @@ function AdminKitchenPage() {
             <div>
               <CardTitle className="text-base">
                 {currentBatch
-                  ? `Week of ${format(parseISO(currentBatch.weekStart), "MMM d, yyyy")}`
+                  ? `Week of ${formatDateString(currentBatch.weekStart, "MMM d, yyyy")}`
                   : "No batch selected"}
               </CardTitle>
               <CardDescription>

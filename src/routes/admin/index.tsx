@@ -1,5 +1,4 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { format, parseISO } from "date-fns";
 import { CalendarClock, ClipboardCheck, CreditCard, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDateString } from "@/lib/dates";
 import {
   batchStatusBadgeVariant,
   formatBatchStatus,
@@ -44,7 +44,7 @@ function AdminDashboardPage() {
   const kpiCards = [
     {
       title: "Current batch",
-      value: currentBatch ? format(parseISO(currentBatch.weekStart), "MMM d") : "—",
+      value: currentBatch ? formatDateString(currentBatch.weekStart, "MMM d") : "—",
       detail: currentBatch
         ? `${formatBatchStatus(currentBatch.status)} · ${currentBatch.orderCount} order(s)`
         : "Create a batch to start the week",
@@ -108,7 +108,7 @@ function AdminDashboardPage() {
             <div>
               <CardTitle className="text-base">
                 {currentBatch
-                  ? `This week — ${format(parseISO(currentBatch.weekStart), "MMM d, yyyy")}`
+                  ? `This week — ${formatDateString(currentBatch.weekStart, "MMM d, yyyy")}`
                   : "This week's orders"}
               </CardTitle>
               <CardDescription>Review queue and pickup assignments</CardDescription>

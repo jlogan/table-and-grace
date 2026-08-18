@@ -10,6 +10,8 @@ import type {
   AdminPickupWindowOption,
 } from "@/orders/admin-types.ts";
 
+import { toIsoDateString } from "@/lib/dates.ts";
+
 import { getDb } from "./index.server.ts";
 import { batchItems } from "./schema/batch-items.ts";
 import { customerProfiles } from "./schema/customer-profiles.ts";
@@ -94,8 +96,8 @@ export async function listAdminBatches(): Promise<AdminBatchSummary[]> {
 
   return rows.map((row) => ({
     id: row.id,
-    weekStart: String(row.weekStart),
-    pickupDate: row.pickupDate ? String(row.pickupDate) : null,
+    weekStart: toIsoDateString(row.weekStart) ?? "",
+    pickupDate: toIsoDateString(row.pickupDate),
     status: row.status,
     reviewDeadline: row.reviewDeadline?.toISOString() ?? null,
     chargeScheduledAt: row.chargeScheduledAt?.toISOString() ?? null,
@@ -472,7 +474,7 @@ export async function listAdminOrders(batchId?: string): Promise<AdminOrderRow[]
   return rows.map((row) => ({
     id: row.id,
     batchId: row.batchId,
-    batchWeekStart: String(row.batchWeekStart),
+    batchWeekStart: toIsoDateString(row.batchWeekStart) ?? "",
     customerName: row.customerName,
     customerEmail: row.customerEmail,
     status: row.status,

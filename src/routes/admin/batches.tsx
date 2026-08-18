@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { format, parseISO } from "date-fns";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDateString } from "@/lib/dates";
 import {
   createAdminWeeklyBatch,
   fetchAdminBatches,
@@ -268,7 +268,7 @@ function AdminBatchesPage() {
                     onClick={() => handleSelectBatch(batch)}
                   >
                     <TableCell className="font-medium">
-                      {format(parseISO(batch.weekStart), "MMM d, yyyy")}
+                      {formatDateString(batch.weekStart, "MMM d, yyyy")}
                     </TableCell>
                     <TableCell>
                       <Badge variant={batchStatusBadgeVariant(batch.status)}>
@@ -280,7 +280,7 @@ function AdminBatchesPage() {
                     <TableCell className="text-right tabular-nums">{batch.itemCount}</TableCell>
                     <TableCell>
                       {batch.reviewDeadline
-                        ? format(parseISO(batch.reviewDeadline), "MMM d, h:mm a")
+                        ? formatDateString(batch.reviewDeadline, "MMM d, h:mm a")
                         : "—"}
                     </TableCell>
                     <TableCell>
@@ -389,7 +389,7 @@ function AdminBatchesPage() {
                 <div>
                   <CardTitle className="text-base">
                     Batch inventory — week of{" "}
-                    {format(parseISO(selectedBatch.weekStart), "MMM d, yyyy")}
+                    {formatDateString(selectedBatch.weekStart, "MMM d, yyyy")}
                   </CardTitle>
                   <CardDescription>
                     Set cooked quantities from the active menu catalog.
