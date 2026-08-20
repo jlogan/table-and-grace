@@ -18,7 +18,7 @@ import {
   setSessionCookie,
 } from "./session.server";
 import type { CurrentUser } from "./types";
-import { getCurrentUser, getUserById } from "./user.server";
+import { getCurrentUser } from "./user.server";
 
 const emailSchema = z.string().trim().email().max(255);
 const passwordSchema = z.string().min(8, "Password must be at least 8 characters").max(128);
@@ -74,10 +74,13 @@ export const signupWithPassword = createServerFn({ method: "POST" })
     const token = await createSession(userId);
     setSessionCookie(token);
 
-    const user = await getUserById(userId);
-    if (!user) {
-      throw new Error("Account created but session could not be established.");
-    }
+    const user: CurrentUser = {
+      id: userId,
+      email,
+      name: data.name ?? null,
+      role: "customer",
+      phone: null,
+    };
 
     return { user };
   });
@@ -91,9 +94,14 @@ export const loginWithPassword = createServerFn({ method: "POST" })
     const [userRow] = await db
       .select({
         id: users.id,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        phone: customerProfiles.phone,
         passwordHash: users.passwordHash,
       })
       .from(users)
+      .leftJoin(customerProfiles, eq(customerProfiles.userId, users.id))
       .where(eq(users.email, email))
       .limit(1);
 
@@ -109,10 +117,13 @@ export const loginWithPassword = createServerFn({ method: "POST" })
     const token = await createSession(userRow.id);
     setSessionCookie(token);
 
-    const user = await getUserById(userRow.id);
-    if (!user) {
-      throw new Error("Login succeeded but session could not be established.");
-    }
+    const user: CurrentUser = {
+      id: userRow.id,
+      email: userRow.email,
+      name: userRow.name,
+      role: userRow.role,
+      phone: userRow.phone,
+    };
 
     return { user };
   });

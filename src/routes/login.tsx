@@ -27,6 +27,11 @@ function postLoginPath(redirect: string | undefined, user: CurrentUser): AppPath
 
 export const Route = createFileRoute("/login")({
   validateSearch: loginSearchSchema,
+  beforeLoad: ({ context, search }) => {
+    if (context.user) {
+      throw redirect({ to: postLoginPath(search.redirect, context.user) });
+    }
+  },
   head: () => ({
     meta: [{ title: "Log In — GOFOFA" }],
   }),
