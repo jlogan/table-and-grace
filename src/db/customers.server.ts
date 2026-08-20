@@ -15,7 +15,8 @@ import { getDb } from "./index.server.ts";
 import { batchItems } from "./schema/batch-items.ts";
 import { customerProfiles } from "./schema/customer-profiles.ts";
 import type { PortionDefault } from "./schema/customer-profiles.ts";
-import { memberships, type MembershipStatus } from "./schema/memberships.ts";
+import type { BillingProfile, MembershipStatus } from "./schema/memberships.ts";
+import { memberships } from "./schema/memberships.ts";
 import { menuItems } from "./schema/menu-items.ts";
 import { orderLines } from "./schema/order-lines.ts";
 import { pickupWindows } from "./schema/pickup-windows.ts";
@@ -58,7 +59,7 @@ function mergePlanTags(
   return kept;
 }
 
-/** All customer-role users with profile, membership, and order counts. */
+/** All customer-role users with profile and order counts (membership joined separately). */
 export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
   const db = getDb();
 
@@ -69,8 +70,6 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
       name: users.name,
       role: users.role,
       createdAt: users.createdAt,
-      membershipId: memberships.id,
-      membershipStatus: memberships.status,
       paymentSchedule: customerProfiles.paymentSchedule,
       portionDefault: customerProfiles.portionDefault,
       defaultPickupWindowId: customerProfiles.defaultPickupWindowId,
@@ -83,10 +82,51 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
     })
     .from(users)
     .leftJoin(customerProfiles, eq(users.id, customerProfiles.userId))
-    .leftJoin(memberships, eq(users.id, memberships.userId))
     .leftJoin(pickupWindows, eq(customerProfiles.defaultPickupWindowId, pickupWindows.id))
     .where(eq(users.role, "customer"))
     .orderBy(desc(users.createdAt));
+
+  const membershipRows =
+    rows.length === 0
+      ? []
+      : await db
+          .select({
+            id: memberships.id,
+            userId: memberships.userId,
+            status: memberships.status,
+            updatedAt: memberships.updatedAt,
+          })
+          .from(memberships)
+          .where(
+            inArray(
+              memberships.userId,
+              rows.map((row) => row.userId),
+            ),
+          )
+          .orderBy(desc(memberships.updatedAt));
+
+  const membershipStatusRank: Record<MembershipStatus, number> = {
+    active: 0,
+    paused: 1,
+    cancelled: 2,
+  };
+  const sortedMembershipRows = [...membershipRows].sort((a, b) => {
+    const rankDiff = membershipStatusRank[a.status] - membershipStatusRank[b.status];
+    if (rankDiff !== 0) return rankDiff;
+    return b.updatedAt.getTime() - a.updatedAt.getTime();
+  });
+
+  const primaryMembershipByUser = new Map<
+    string,
+    { membershipId: string; membershipStatus: MembershipStatus }
+  >();
+  for (const membership of sortedMembershipRows) {
+    if (primaryMembershipByUser.has(membership.userId)) continue;
+    primaryMembershipByUser.set(membership.userId, {
+      membershipId: membership.id,
+      membershipStatus: membership.status,
+    });
+  }
 
   const planSlugs = rows
     .map((row) => parsePlanSlugFromTags(row.dietaryTags))
@@ -106,14 +146,15 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
 
   return rows.map((row) => {
     const planSlug = parsePlanSlugFromTags(row.dietaryTags);
+    const primaryMembership = primaryMembershipByUser.get(row.userId);
     return {
       userId: row.userId,
       email: row.email,
       name: row.name,
       role: row.role,
       createdAt: row.createdAt.toISOString(),
-      membershipId: row.membershipId,
-      membershipStatus: row.membershipStatus,
+      membershipId: primaryMembership?.membershipId ?? null,
+      membershipStatus: primaryMembership?.membershipStatus ?? null,
       paymentSchedule: row.paymentSchedule ?? "weekly_autopay",
       portionDefault: row.portionDefault ?? "6oz",
       defaultPickupWindowId: row.defaultPickupWindowId,
@@ -129,23 +170,63 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
 
 /** Active or paused memberships for the memberships admin view. */
 export async function listAdminMemberships(): Promise<AdminMembershipRow[]> {
-  const customers = await listAdminCustomers();
-  return customers
-    .filter((c) => c.membershipStatus === "active" || c.membershipStatus === "paused")
-    .map((c) => ({
-      userId: c.userId,
-      email: c.email,
-      name: c.name,
-      membershipId: c.membershipId,
-      membershipStatus: c.membershipStatus ?? "active",
-      paymentSchedule: c.paymentSchedule,
-      portionDefault: c.portionDefault,
-      pickupLabel: c.pickupLabel,
-      planSlug: c.planSlug,
-      planName: c.planName,
-      mealsPerWeek: c.mealsPerWeek,
-      chefNotes: c.chefNotes,
-    }));
+  const db = getDb();
+
+  const rows = await db
+    .select({
+      membershipId: memberships.id,
+      userId: users.id,
+      email: users.email,
+      name: users.name,
+      membershipStatus: memberships.status,
+      paymentSchedule: memberships.paymentSchedule,
+      portionDefault: memberships.portionDefault,
+      planSlug: memberships.planSlug,
+      mealsPerWeek: memberships.mealsPerWeek,
+      billingProfile: memberships.billingProfile,
+      fixedPricePerMealCents: memberships.fixedPricePerMealCents,
+      discountCents: memberships.discountCents,
+      dietaryTags: customerProfiles.dietaryTags,
+    })
+    .from(memberships)
+    .innerJoin(users, eq(memberships.userId, users.id))
+    .leftJoin(customerProfiles, eq(users.id, customerProfiles.userId))
+    .orderBy(desc(memberships.updatedAt));
+
+  const planSlugs = rows
+    .map((row) => row.planSlug ?? parsePlanSlugFromTags(row.dietaryTags))
+    .filter((slug): slug is string => Boolean(slug));
+
+  const planNamesBySlug = new Map<string, string>();
+  if (planSlugs.length > 0) {
+    const categories = await db
+      .select({ slug: planCategories.slug, name: planCategories.name })
+      .from(planCategories)
+      .where(inArray(planCategories.slug, [...new Set(planSlugs)]));
+
+    for (const cat of categories) {
+      planNamesBySlug.set(cat.slug, cat.name);
+    }
+  }
+
+  return rows.map((row) => {
+    const planSlug = row.planSlug ?? parsePlanSlugFromTags(row.dietaryTags);
+    return {
+      membershipId: row.membershipId,
+      userId: row.userId,
+      email: row.email,
+      name: row.name,
+      membershipStatus: row.membershipStatus,
+      paymentSchedule: row.paymentSchedule,
+      portionDefault: row.portionDefault,
+      planSlug,
+      planName: planSlug ? (planNamesBySlug.get(planSlug) ?? planSlug) : null,
+      mealsPerWeek: row.mealsPerWeek ?? parseMealsPerWeekFromTags(row.dietaryTags),
+      billingProfile: row.billingProfile,
+      fixedPricePerMealCents: row.fixedPricePerMealCents,
+      discountCents: row.discountCents,
+    };
+  });
 }
 
 export async function listAdminPlanCategories(): Promise<AdminPlanCategoryOption[]> {
@@ -210,6 +291,10 @@ export async function createAdminCustomer(input: CreateAdminCustomerInput): Prom
       id: randomUUID(),
       userId,
       status: "active",
+      planSlug: input.planSlug?.trim() || null,
+      mealsPerWeek: input.mealsPerWeek ?? null,
+      portionDefault: input.portionDefault ?? "6oz",
+      paymentSchedule: input.paymentSchedule ?? "weekly_autopay",
     });
   }
 
@@ -286,7 +371,13 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
     const [membership] = await db
       .select({ id: memberships.id })
       .from(memberships)
-      .where(eq(memberships.userId, input.userId))
+      .where(
+        and(
+          eq(memberships.userId, input.userId),
+          inArray(memberships.status, ["active", "paused", "cancelled"]),
+        ),
+      )
+      .orderBy(desc(memberships.updatedAt))
       .limit(1);
 
     if (membership) {
@@ -299,9 +390,138 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
         id: randomUUID(),
         userId: input.userId,
         status: input.membershipStatus,
+        portionDefault: input.portionDefault ?? "6oz",
+        paymentSchedule: input.paymentSchedule ?? "weekly_autopay",
+        planSlug: input.planSlug?.trim() || null,
+        mealsPerWeek: input.mealsPerWeek ?? null,
       });
     }
   }
+}
+
+export type CreateAdminMembershipInput = {
+  userId: string;
+  planSlug?: string;
+  mealsPerWeek?: number;
+  portionDefault?: PortionDefault;
+  paymentSchedule?: PaymentSchedule;
+  billingProfile?: BillingProfile;
+  fixedPricePerMealCents?: number;
+  discountCents?: number;
+};
+
+/** Create a new membership for an existing customer (supports multiple per customer). */
+export async function createAdminMembership(input: CreateAdminMembershipInput): Promise<string> {
+  const db = getDb();
+
+  const [user] = await db
+    .select({ id: users.id, role: users.role })
+    .from(users)
+    .where(eq(users.id, input.userId))
+    .limit(1);
+
+  if (!user || user.role !== "customer") {
+    throw new Error("Customer not found.");
+  }
+
+  const billingProfile = input.billingProfile ?? "catalog";
+  if (
+    billingProfile === "fixed_price" &&
+    (input.fixedPricePerMealCents == null || input.fixedPricePerMealCents <= 0)
+  ) {
+    throw new Error("Fixed price per meal is required for fixed price billing.");
+  }
+
+  const membershipId = randomUUID();
+
+  await db.insert(memberships).values({
+    id: membershipId,
+    userId: input.userId,
+    status: "active",
+    planSlug: input.planSlug?.trim() || null,
+    mealsPerWeek: input.mealsPerWeek ?? null,
+    portionDefault: input.portionDefault ?? "6oz",
+    paymentSchedule: input.paymentSchedule ?? "weekly_autopay",
+    billingProfile,
+    fixedPricePerMealCents:
+      billingProfile === "fixed_price" ? (input.fixedPricePerMealCents ?? null) : null,
+    discountCents: input.discountCents ?? 0,
+  });
+
+  return membershipId;
+}
+
+export type UpdateAdminMembershipInput = {
+  membershipId: string;
+  membershipStatus?: MembershipStatus;
+  planSlug?: string | null;
+  mealsPerWeek?: number | null;
+  portionDefault?: PortionDefault;
+  paymentSchedule?: PaymentSchedule;
+  billingProfile?: BillingProfile;
+  fixedPricePerMealCents?: number | null;
+  discountCents?: number;
+};
+
+/** Update membership plan, billing, and status by membership id. */
+export async function updateAdminMembership(input: UpdateAdminMembershipInput): Promise<void> {
+  const db = getDb();
+
+  const [membership] = await db
+    .select({
+      id: memberships.id,
+      billingProfile: memberships.billingProfile,
+      fixedPricePerMealCents: memberships.fixedPricePerMealCents,
+    })
+    .from(memberships)
+    .where(eq(memberships.id, input.membershipId))
+    .limit(1);
+
+  if (!membership) {
+    throw new Error("Membership not found.");
+  }
+
+  const nextBillingProfile = input.billingProfile ?? membership.billingProfile;
+  const nextFixedPricePerMealCents =
+    input.fixedPricePerMealCents !== undefined
+      ? input.fixedPricePerMealCents
+      : membership.fixedPricePerMealCents;
+
+  if (
+    nextBillingProfile === "fixed_price" &&
+    (nextFixedPricePerMealCents == null || nextFixedPricePerMealCents <= 0)
+  ) {
+    throw new Error("Fixed price per meal is required for fixed price billing.");
+  }
+
+  const updates: {
+    status?: MembershipStatus;
+    planSlug?: string | null;
+    mealsPerWeek?: number | null;
+    portionDefault?: PortionDefault;
+    paymentSchedule?: PaymentSchedule;
+    billingProfile?: BillingProfile;
+    fixedPricePerMealCents?: number | null;
+    discountCents?: number;
+  } = {};
+
+  if (input.membershipStatus !== undefined) updates.status = input.membershipStatus;
+  if (input.planSlug !== undefined) updates.planSlug = input.planSlug?.trim() || null;
+  if (input.mealsPerWeek !== undefined) updates.mealsPerWeek = input.mealsPerWeek;
+  if (input.portionDefault !== undefined) updates.portionDefault = input.portionDefault;
+  if (input.paymentSchedule !== undefined) updates.paymentSchedule = input.paymentSchedule;
+  if (input.billingProfile !== undefined) updates.billingProfile = input.billingProfile;
+  if (input.discountCents !== undefined) updates.discountCents = input.discountCents;
+
+  if (nextBillingProfile === "catalog") {
+    updates.fixedPricePerMealCents = null;
+  } else if (input.fixedPricePerMealCents !== undefined) {
+    updates.fixedPricePerMealCents = input.fixedPricePerMealCents;
+  }
+
+  if (Object.keys(updates).length === 0) return;
+
+  await db.update(memberships).set(updates).where(eq(memberships.id, input.membershipId));
 }
 
 /** Aggregate order-line demand vs batch inventory for kitchen prep. */

@@ -22,25 +22,32 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatMembershipStatus, membershipStatusBadgeVariant } from "@/orders/admin-types";
+import type { PortionDefault } from "@/db/schema/customer-profiles";
+import type { BillingProfile, MembershipStatus } from "@/db/schema/memberships";
+import type { PaymentSchedule } from "@/db/schema/payment-schedules";
+import type { AdminMembershipRow } from "@/orders/admin-types";
 import {
+  formatBillingProfile,
+  formatMembershipStatus,
+  membershipStatusBadgeVariant,
+} from "@/orders/admin-types";
+import {
+  createAdminMembershipRecord,
   fetchAdminCustomers,
   fetchAdminMemberships,
-  fetchAdminPickupWindows,
   fetchAdminPlanCategories,
-  updateAdminCustomerProfile,
+  updateAdminMembershipRecord,
 } from "@/orders/admin.functions.server";
-import { formatPaymentSchedule } from "@/orders/review-types";
+import { centsToLabel, formatPaymentSchedule } from "@/orders/review-types";
 
 export const Route = createFileRoute("/admin/memberships")({
   beforeLoad: async () => {
-    const [memberships, customers, planCategories, pickupWindows] = await Promise.all([
+    const [memberships, customers, planCategories] = await Promise.all([
       fetchAdminMemberships(),
       fetchAdminCustomers(),
       fetchAdminPlanCategories(),
-      fetchAdminPickupWindows(),
     ]);
-    return { memberships, customers, planCategories, pickupWindows };
+    return { memberships, customers, planCategories };
   },
   head: () => ({
     meta: [{ title: "Memberships — GOFOFA Ops" }],
@@ -48,31 +55,59 @@ export const Route = createFileRoute("/admin/memberships")({
   component: AdminMembershipsPage,
 });
 
+type MembershipFormData = {
+  userId?: string;
+  planSlug?: string;
+  mealsPerWeek?: number;
+  paymentSchedule: PaymentSchedule;
+  portionDefault: PortionDefault;
+  billingProfile: BillingProfile;
+  fixedPricePerMealCents?: number;
+  discountCents?: number;
+  membershipStatus?: MembershipStatus;
+};
+
 function AdminMembershipsPage() {
-  const {
-    memberships: initialMemberships,
-    customers,
-    planCategories,
-    pickupWindows,
-  } = Route.useRouteContext();
-  const updateFn = useServerFn(updateAdminCustomerProfile);
+  const { memberships: initialMemberships, customers, planCategories } = Route.useRouteContext();
+  const createFn = useServerFn(createAdminMembershipRecord);
+  const updateFn = useServerFn(updateAdminMembershipRecord);
   const refreshMembershipsFn = useServerFn(fetchAdminMemberships);
-  const refreshCustomersFn = useServerFn(fetchAdminCustomers);
 
   const [memberships, setMemberships] = useState(initialMemberships);
-  const [customerOptions, setCustomerOptions] = useState(customers);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingMembership, setEditingMembership] = useState<AdminMembershipRow | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const customersWithoutMembership = customerOptions.filter(
-    (c) => !c.membershipId || c.membershipStatus === "cancelled",
-  );
+  /** All customer accounts — includes customers who already have one or more memberships. */
+  const customerOptions = [...customers].sort((a, b) => {
+    const labelA = (a.name?.trim() || a.email).toLowerCase();
+    const labelB = (b.name?.trim() || b.email).toLowerCase();
+    return labelA.localeCompare(labelB);
+  });
 
-  async function setStatus(userId: string, membershipStatus: "active" | "paused" | "cancelled") {
-    await updateFn({ data: { userId, membershipStatus } });
-    setMessage("Membership updated.");
+  async function refreshMemberships() {
     setMemberships(await refreshMembershipsFn());
+  }
+
+  async function cancelMembership(membershipId: string) {
+    setError(null);
+    setMessage(null);
+    try {
+      await updateFn({ data: { membershipId, membershipStatus: "cancelled" } });
+      setMessage("Membership cancelled.");
+      if (editingMembership?.membershipId === membershipId) {
+        setEditingMembership(null);
+      }
+      await refreshMemberships();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not cancel membership.");
+    }
+  }
+
+  function closeForms() {
+    setShowAddForm(false);
+    setEditingMembership(null);
   }
 
   return (
@@ -81,11 +116,20 @@ function AdminMembershipsPage() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-foreground">Memberships</h2>
           <p className="text-sm text-muted-foreground">
-            Link an existing customer to a plan and pickup cadence. Item pricing still flows from
-            the menu catalog at order time.
+            Assign plan and billing preferences per membership. A customer can have more than one
+            active membership.
           </p>
         </div>
-        {!showAddForm ? <Button onClick={() => setShowAddForm(true)}>Add membership</Button> : null}
+        {!showAddForm && !editingMembership ? (
+          <Button
+            onClick={() => {
+              setEditingMembership(null);
+              setShowAddForm(true);
+            }}
+          >
+            Add new membership
+          </Button>
+        ) : null}
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -96,7 +140,7 @@ function AdminMembershipsPage() {
           <CardHeader>
             <CardTitle className="text-base">Add membership</CardTitle>
             <CardDescription>
-              Select an existing customer and assign plan preferences.{" "}
+              Select a customer and set plan details.{" "}
               <Link
                 to="/admin/customers"
                 className="text-primary underline-offset-4 hover:underline"
@@ -107,20 +151,30 @@ function AdminMembershipsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <AddMembershipForm
-              customers={customersWithoutMembership}
+            <MembershipForm
+              mode="add"
+              customers={customerOptions}
               planCategories={planCategories}
-              pickupWindows={pickupWindows}
-              onCancel={() => setShowAddForm(false)}
+              onCancel={closeForms}
               onSubmit={async (data) => {
                 setError(null);
                 setMessage(null);
                 try {
-                  await updateFn({ data });
-                  setShowAddForm(false);
+                  await createFn({
+                    data: {
+                      userId: data.userId!,
+                      planSlug: data.planSlug,
+                      mealsPerWeek: data.mealsPerWeek,
+                      paymentSchedule: data.paymentSchedule,
+                      portionDefault: data.portionDefault,
+                      billingProfile: data.billingProfile,
+                      fixedPricePerMealCents: data.fixedPricePerMealCents,
+                      discountCents: data.discountCents,
+                    },
+                  });
+                  closeForms();
                   setMessage("Membership created.");
-                  setMemberships(await refreshMembershipsFn());
-                  setCustomerOptions(await refreshCustomersFn());
+                  await refreshMemberships();
                 } catch (e) {
                   setError(e instanceof Error ? e.message : "Could not create membership.");
                 }
@@ -130,9 +184,53 @@ function AdminMembershipsPage() {
         </Card>
       ) : null}
 
+      {editingMembership ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Edit membership</CardTitle>
+            <CardDescription>
+              Update plan, billing, and status for{" "}
+              {editingMembership.name?.trim() || editingMembership.email}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MembershipForm
+              mode="edit"
+              membership={editingMembership}
+              planCategories={planCategories}
+              onCancel={closeForms}
+              onSubmit={async (data) => {
+                setError(null);
+                setMessage(null);
+                try {
+                  await updateFn({
+                    data: {
+                      membershipId: editingMembership.membershipId,
+                      membershipStatus: data.membershipStatus,
+                      planSlug: data.planSlug || null,
+                      mealsPerWeek: data.mealsPerWeek ?? null,
+                      paymentSchedule: data.paymentSchedule,
+                      portionDefault: data.portionDefault,
+                      billingProfile: data.billingProfile,
+                      fixedPricePerMealCents: data.fixedPricePerMealCents ?? null,
+                      discountCents: data.discountCents,
+                    },
+                  });
+                  closeForms();
+                  setMessage("Membership updated.");
+                  await refreshMemberships();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Could not update membership.");
+                }
+              }}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Active & paused members</CardTitle>
+          <CardTitle className="text-base">All memberships</CardTitle>
           <CardDescription>
             {memberships.length} membership(s) ·{" "}
             <Link to="/admin/customers" className="text-primary underline-offset-4 hover:underline">
@@ -146,11 +244,11 @@ function AdminMembershipsPage() {
               <TableRow>
                 <TableHead>Member</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Plan</TableHead>
+                <TableHead>Plan type</TableHead>
                 <TableHead>Portion</TableHead>
-                <TableHead>Payment</TableHead>
-                <TableHead>Pickup</TableHead>
-                <TableHead className="w-[180px]" />
+                <TableHead>Invoice frequency</TableHead>
+                <TableHead>Billing</TableHead>
+                <TableHead className="w-[200px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -164,8 +262,12 @@ function AdminMembershipsPage() {
               ) : (
                 memberships.map((member) => {
                   const label = member.name?.trim() || member.email;
+                  const isEditing = editingMembership?.membershipId === member.membershipId;
                   return (
-                    <TableRow key={member.userId}>
+                    <TableRow
+                      key={member.membershipId}
+                      data-state={isEditing ? "selected" : undefined}
+                    >
                       <TableCell>
                         <div className="font-medium">{label}</div>
                         {member.name ? (
@@ -189,26 +291,69 @@ function AdminMembershipsPage() {
                       <TableCell className="text-sm">
                         {formatPaymentSchedule(member.paymentSchedule)}
                       </TableCell>
-                      <TableCell>{member.pickupLabel ?? "—"}</TableCell>
+                      <TableCell className="text-sm">
+                        {formatBillingProfile(member.billingProfile)}
+                        {member.billingProfile === "fixed_price" &&
+                        member.fixedPricePerMealCents != null ? (
+                          <div className="text-xs text-muted-foreground">
+                            {centsToLabel(member.fixedPricePerMealCents)}/meal
+                            {member.discountCents > 0
+                              ? ` · ${centsToLabel(member.discountCents)} off`
+                              : ""}
+                          </div>
+                        ) : null}
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          {member.membershipStatus !== "active" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setShowAddForm(false);
+                              setEditingMembership(member);
+                              setError(null);
+                              setMessage(null);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          {member.membershipStatus === "paused" ? (
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => setStatus(member.userId, "active")}
+                              onClick={async () => {
+                                setError(null);
+                                setMessage(null);
+                                try {
+                                  await updateFn({
+                                    data: {
+                                      membershipId: member.membershipId,
+                                      membershipStatus: "active",
+                                    },
+                                  });
+                                  setMessage("Membership activated.");
+                                  await refreshMemberships();
+                                } catch (e) {
+                                  setError(
+                                    e instanceof Error
+                                      ? e.message
+                                      : "Could not activate membership.",
+                                  );
+                                }
+                              }}
                             >
                               Activate
                             </Button>
-                          ) : (
+                          ) : null}
+                          {member.membershipStatus !== "cancelled" ? (
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => setStatus(member.userId, "paused")}
+                              onClick={() => cancelMembership(member.membershipId)}
                             >
-                              Pause
+                              Cancel
                             </Button>
-                          )}
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -223,92 +368,123 @@ function AdminMembershipsPage() {
   );
 }
 
-function AddMembershipForm({
+function parseDollarInput(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number.parseFloat(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+  return Math.round(parsed * 100);
+}
+
+function centsToDollarInput(cents: number | null | undefined): string {
+  if (cents == null) return "";
+  return (cents / 100).toFixed(2);
+}
+
+function MembershipForm({
+  mode,
   customers,
+  membership,
   planCategories,
-  pickupWindows,
   onCancel,
   onSubmit,
 }: {
-  customers: Array<{
+  mode: "add" | "edit";
+  customers?: Array<{
     userId: string;
     email: string;
     name: string | null;
-    membershipStatus: string | null;
   }>;
+  membership?: AdminMembershipRow;
   planCategories: Array<{ slug: string; name: string }>;
-  pickupWindows: Array<{ id: string; label: string }>;
   onCancel: () => void;
-  onSubmit: (data: {
-    userId: string;
-    membershipStatus: "active";
-    planSlug?: string;
-    mealsPerWeek?: number;
-    paymentSchedule?: "weekly_autopay" | "monthly_autopay" | "manual_per_order";
-    portionDefault?: "4oz" | "6oz";
-    defaultPickupWindowId?: string;
-  }) => Promise<void>;
+  onSubmit: (data: MembershipFormData) => Promise<void>;
 }) {
-  const [userId, setUserId] = useState("");
-  const [planSlug, setPlanSlug] = useState("");
-  const [mealsPerWeek, setMealsPerWeek] = useState("");
-  const [paymentSchedule, setPaymentSchedule] = useState("weekly_autopay");
-  const [portionDefault, setPortionDefault] = useState<"4oz" | "6oz">("6oz");
-  const [pickupWindowId, setPickupWindowId] = useState(pickupWindows[0]?.id ?? "");
+  const [userId, setUserId] = useState(membership?.userId ?? "");
+  const [planSlug, setPlanSlug] = useState(membership?.planSlug ?? "");
+  const [mealsPerWeek, setMealsPerWeek] = useState(
+    membership?.mealsPerWeek != null ? String(membership.mealsPerWeek) : "",
+  );
+  const [paymentSchedule, setPaymentSchedule] = useState<PaymentSchedule>(
+    membership?.paymentSchedule ?? "weekly_autopay",
+  );
+  const [portionDefault, setPortionDefault] = useState<PortionDefault>(
+    membership?.portionDefault ?? "6oz",
+  );
+  const [billingProfile, setBillingProfile] = useState<BillingProfile>(
+    membership?.billingProfile ?? "catalog",
+  );
+  const [fixedPricePerMeal, setFixedPricePerMeal] = useState(
+    centsToDollarInput(membership?.fixedPricePerMealCents),
+  );
+  const [discountAmount, setDiscountAmount] = useState(
+    centsToDollarInput(membership?.discountCents ?? 0),
+  );
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus>(
+    membership?.membershipStatus ?? "active",
+  );
   const [saving, setSaving] = useState(false);
+
+  const fixedPriceCents = parseDollarInput(fixedPricePerMeal);
+  const discountCents = parseDollarInput(discountAmount) ?? 0;
+  const fixedPriceRequired =
+    billingProfile === "fixed_price" && (fixedPriceCents == null || fixedPriceCents <= 0);
 
   return (
     <form
       className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (!userId) return;
+        if ((mode === "add" && !userId) || fixedPriceRequired) return;
         setSaving(true);
         try {
           await onSubmit({
-            userId,
-            membershipStatus: "active",
+            userId: mode === "add" ? userId : undefined,
             planSlug: planSlug || undefined,
             mealsPerWeek: mealsPerWeek ? Number(mealsPerWeek) : undefined,
-            paymentSchedule: paymentSchedule as
-              "weekly_autopay" | "monthly_autopay" | "manual_per_order",
+            paymentSchedule,
             portionDefault,
-            defaultPickupWindowId: pickupWindowId || undefined,
+            billingProfile,
+            fixedPricePerMealCents: billingProfile === "fixed_price" ? fixedPriceCents : undefined,
+            discountCents: billingProfile === "fixed_price" ? discountCents : undefined,
+            membershipStatus: mode === "edit" ? membershipStatus : undefined,
           });
         } finally {
           setSaving(false);
         }
       }}
     >
-      <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="membership-customer">Customer</Label>
-        <Select value={userId || "none"} onValueChange={(v) => setUserId(v === "none" ? "" : v)}>
-          <SelectTrigger id="membership-customer">
-            <SelectValue placeholder="Select customer" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none" disabled>
-              Select customer
-            </SelectItem>
-            {customers.length === 0 ? (
-              <SelectItem value="empty" disabled>
-                No customers without membership
+      {mode === "add" ? (
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="membership-customer">Customer</Label>
+          <Select value={userId || "none"} onValueChange={(v) => setUserId(v === "none" ? "" : v)}>
+            <SelectTrigger id="membership-customer">
+              <SelectValue placeholder="Select customer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none" disabled>
+                Select customer
               </SelectItem>
-            ) : (
-              customers.map((customer) => {
-                const label = customer.name?.trim() || customer.email;
-                return (
-                  <SelectItem key={customer.userId} value={customer.userId}>
-                    {label} ({customer.email})
-                  </SelectItem>
-                );
-              })
-            )}
-          </SelectContent>
-        </Select>
-      </div>
+              {customers?.length === 0 ? (
+                <SelectItem value="empty" disabled>
+                  No customers yet
+                </SelectItem>
+              ) : (
+                customers?.map((customer) => {
+                  const label = customer.name?.trim() || customer.email;
+                  return (
+                    <SelectItem key={customer.userId} value={customer.userId}>
+                      {label} ({customer.email})
+                    </SelectItem>
+                  );
+                })
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       <div className="space-y-2">
-        <Label htmlFor="membership-plan">Plan type</Label>
+        <Label htmlFor="membership-plan">Plan Type</Label>
         <Select
           value={planSlug || "none"}
           onValueChange={(v) => setPlanSlug(v === "none" ? "" : v)}
@@ -327,7 +503,7 @@ function AddMembershipForm({
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="membership-meals">Meals per week</Label>
+        <Label htmlFor="membership-meals">Meals Per Week</Label>
         <Input
           id="membership-meals"
           type="number"
@@ -339,8 +515,11 @@ function AddMembershipForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="membership-portion">Default portion</Label>
-        <Select value={portionDefault} onValueChange={(v) => setPortionDefault(v as "4oz" | "6oz")}>
+        <Label htmlFor="membership-portion">Portion Size</Label>
+        <Select
+          value={portionDefault}
+          onValueChange={(v) => setPortionDefault(v as PortionDefault)}
+        >
           <SelectTrigger id="membership-portion">
             <SelectValue />
           </SelectTrigger>
@@ -351,38 +530,97 @@ function AddMembershipForm({
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="membership-payment">Payment cadence</Label>
-        <Select value={paymentSchedule} onValueChange={setPaymentSchedule}>
+        <Label htmlFor="membership-payment">Invoice Frequency</Label>
+        <Select
+          value={paymentSchedule}
+          onValueChange={(v) => setPaymentSchedule(v as PaymentSchedule)}
+        >
           <SelectTrigger id="membership-payment">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="weekly_autopay">Weekly autopay</SelectItem>
-            <SelectItem value="monthly_autopay">Monthly autopay</SelectItem>
-            <SelectItem value="manual_per_order">Manual per order</SelectItem>
+            <SelectItem value="weekly_autopay">Weekly</SelectItem>
+            <SelectItem value="monthly_autopay">Monthly</SelectItem>
+            <SelectItem value="manual_per_order">Manual</SelectItem>
           </SelectContent>
         </Select>
       </div>
-      {pickupWindows.length > 0 ? (
+      <div className="space-y-2">
+        <Label htmlFor="membership-billing-profile">Billing Profile</Label>
+        <Select
+          value={billingProfile}
+          onValueChange={(v) => setBillingProfile(v as BillingProfile)}
+        >
+          <SelectTrigger id="membership-billing-profile">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="catalog">Catalog (menu pricing)</SelectItem>
+            <SelectItem value="fixed_price">Fixed price meals</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {billingProfile === "fixed_price" ? (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="membership-fixed-price">Amount Per Meal</Label>
+            <Input
+              id="membership-fixed-price"
+              type="number"
+              min={0}
+              step={0.01}
+              value={fixedPricePerMeal}
+              onChange={(e) => setFixedPricePerMeal(e.target.value)}
+              placeholder="4.50"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="membership-discount">Discount Amount</Label>
+            <Input
+              id="membership-discount"
+              type="number"
+              min={0}
+              step={0.01}
+              value={discountAmount}
+              onChange={(e) => setDiscountAmount(e.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+        </>
+      ) : null}
+      {mode === "edit" ? (
         <div className="space-y-2">
-          <Label htmlFor="membership-pickup">Default pickup</Label>
-          <Select value={pickupWindowId} onValueChange={setPickupWindowId}>
-            <SelectTrigger id="membership-pickup">
-              <SelectValue placeholder="Pickup window" />
+          <Label htmlFor="membership-status">Status</Label>
+          <Select
+            value={membershipStatus}
+            onValueChange={(v) => setMembershipStatus(v as MembershipStatus)}
+          >
+            <SelectTrigger id="membership-status">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {pickupWindows.map((pw) => (
-                <SelectItem key={pw.id} value={pw.id}>
-                  {pw.label}
-                </SelectItem>
-              ))}
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="paused">Paused</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
         </div>
       ) : null}
       <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
-        <Button type="submit" disabled={saving || !userId || customers.length === 0}>
-          {saving ? "Creating…" : "Create membership"}
+        <Button
+          type="submit"
+          disabled={
+            saving || (mode === "add" && (!userId || customers?.length === 0)) || fixedPriceRequired
+          }
+        >
+          {saving
+            ? mode === "add"
+              ? "Creating…"
+              : "Saving…"
+            : mode === "add"
+              ? "Create membership"
+              : "Save changes"}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel

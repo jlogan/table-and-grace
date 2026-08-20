@@ -29,6 +29,13 @@
       "when": 1787082097801,
       "tag": "0003_jay_history_import",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1787083000000,
+      "tag": "0004_membership_details",
+      "breakpoints": true
     }
   ]
 }

@@ -233,7 +233,10 @@ function AdminDashboardPage() {
                 {overview.upcomingCustomers.map((member) => {
                   const label = member.name?.trim() || member.email;
                   return (
-                    <li key={member.userId} className="border-b border-border pb-3 last:border-0">
+                    <li
+                      key={member.membershipId}
+                      className="border-b border-border pb-3 last:border-0"
+                    >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-medium">{label}</span>
                         <Badge variant={membershipStatusBadgeVariant(member.membershipStatus)}>
@@ -245,7 +248,6 @@ function AdminDashboardPage() {
                         {member.mealsPerWeek ? ` · ${member.mealsPerWeek} meals/wk` : ""}
                         {" · "}
                         {formatPaymentSchedule(member.paymentSchedule)}
-                        {member.pickupLabel ? ` · ${member.pickupLabel}` : ""}
                       </p>
                     </li>
                   );

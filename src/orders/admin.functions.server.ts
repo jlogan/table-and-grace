@@ -14,12 +14,14 @@ import {
 } from "@/db/batches.server";
 import {
   createAdminCustomer,
+  createAdminMembership,
   getAdminDashboardOverview,
   getBatchMealDemand,
   listAdminCustomers,
   listAdminMemberships,
   listAdminPlanCategories,
   updateAdminCustomer,
+  updateAdminMembership,
 } from "@/db/customers.server";
 import {
   createAdminMenuItem,
@@ -27,7 +29,7 @@ import {
   listAdminPlanCategoriesWithId,
   updateAdminMenuItem,
 } from "@/db/catalog.server";
-import { membershipStatuses } from "@/db/schema/memberships";
+import { billingProfiles, membershipStatuses } from "@/db/schema/memberships";
 import { portionDefaults } from "@/db/schema/customer-profiles";
 import { paymentSchedules } from "@/db/schema/payment-schedules";
 
@@ -158,6 +160,45 @@ export const updateAdminCustomerProfile = createServerFn({ method: "POST" })
   .validator(updateCustomerSchema)
   .handler(async ({ data }) => {
     await updateAdminCustomer(data);
+    return { ok: true as const };
+  });
+
+const createMembershipSchema = z.object({
+  userId: z.string().uuid(),
+  planSlug: z.string().trim().max(64).optional(),
+  mealsPerWeek: z.number().int().min(1).max(56).optional(),
+  portionDefault: z.enum(portionDefaults).optional(),
+  paymentSchedule: z.enum(paymentSchedules).optional(),
+  billingProfile: z.enum(billingProfiles).optional(),
+  fixedPricePerMealCents: z.number().int().min(0).max(999999).optional(),
+  discountCents: z.number().int().min(0).max(999999).optional(),
+});
+
+export const createAdminMembershipRecord = createServerFn({ method: "POST" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(createMembershipSchema)
+  .handler(async ({ data }) => {
+    const membershipId = await createAdminMembership(data);
+    return { membershipId };
+  });
+
+const updateMembershipSchema = z.object({
+  membershipId: z.string().uuid(),
+  membershipStatus: z.enum(membershipStatuses).optional(),
+  planSlug: z.string().trim().max(64).nullable().optional(),
+  mealsPerWeek: z.number().int().min(1).max(56).nullable().optional(),
+  portionDefault: z.enum(portionDefaults).optional(),
+  paymentSchedule: z.enum(paymentSchedules).optional(),
+  billingProfile: z.enum(billingProfiles).optional(),
+  fixedPricePerMealCents: z.number().int().min(0).max(999999).nullable().optional(),
+  discountCents: z.number().int().min(0).max(999999).optional(),
+});
+
+export const updateAdminMembershipRecord = createServerFn({ method: "POST" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(updateMembershipSchema)
+  .handler(async ({ data }) => {
+    await updateAdminMembership(data);
     return { ok: true as const };
   });
 

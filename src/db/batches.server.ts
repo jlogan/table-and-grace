@@ -295,7 +295,7 @@ async function resolvePublishCustomers(): Promise<
   const activeMembers = await db
     .select({
       userId: memberships.userId,
-      portionDefault: customerProfiles.portionDefault,
+      portionDefault: memberships.portionDefault,
       defaultPickupWindowId: customerProfiles.defaultPickupWindowId,
     })
     .from(memberships)
@@ -303,7 +303,13 @@ async function resolvePublishCustomers(): Promise<
     .where(eq(memberships.status, "active"));
 
   if (activeMembers.length > 0) {
-    return activeMembers;
+    const byUser = new Map<string, (typeof activeMembers)[number]>();
+    for (const member of activeMembers) {
+      if (!byUser.has(member.userId)) {
+        byUser.set(member.userId, member);
+      }
+    }
+    return [...byUser.values()];
   }
 
   return db

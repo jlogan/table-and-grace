@@ -1,5 +1,5 @@
 import type { PortionDefault } from "@/db/schema/customer-profiles.ts";
-import type { MembershipStatus } from "@/db/schema/memberships.ts";
+import type { BillingProfile, MembershipStatus } from "@/db/schema/memberships.ts";
 import type { PaymentSchedule } from "@/db/schema/payment-schedules.ts";
 import type { UserRole } from "@/db/schema/users.ts";
 import type { BatchStatus } from "@/db/schema/weekly-batches.ts";
@@ -116,19 +116,24 @@ export type AdminCustomerRow = {
 };
 
 export type AdminMembershipRow = {
+  membershipId: string;
   userId: string;
   email: string;
   name: string | null;
-  membershipId: string | null;
   membershipStatus: MembershipStatus;
   paymentSchedule: PaymentSchedule;
   portionDefault: PortionDefault;
-  pickupLabel: string | null;
   planSlug: string | null;
   planName: string | null;
   mealsPerWeek: number | null;
-  chefNotes: string | null;
+  billingProfile: BillingProfile;
+  fixedPricePerMealCents: number | null;
+  discountCents: number;
 };
+
+export function formatBillingProfile(profile: BillingProfile): string {
+  return profile === "fixed_price" ? "Fixed price" : "Catalog";
+}
 
 export type BatchMealDemandRow = {
   menuItemId: string;

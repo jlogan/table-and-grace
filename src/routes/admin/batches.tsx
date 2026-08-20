@@ -391,7 +391,7 @@ function AdminBatchesPage() {
                       const label = member.name?.trim() || member.email;
                       return (
                         <li
-                          key={member.userId}
+                          key={member.membershipId}
                           className="border-b border-border pb-2 last:border-0"
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
