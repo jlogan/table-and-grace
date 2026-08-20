@@ -43,7 +43,9 @@
       docker_image_tag: "22"
       shell: "BASH"
       execute_commands:
-        - "npm ci"
+        - "rm -rf node_modules package-lock.json"
+        - "npm install --no-package-lock"
+        - "npm install --no-package-lock --no-save destr"
         - "npm run assets:verify"
         - "npm run build:prod:ci"
         - 'test -f .output/server/index.mjs && test -d .output/public/assets || { echo "ERROR: expected .output/server/index.mjs and .output/public/assets after build"; exit 1; }'
