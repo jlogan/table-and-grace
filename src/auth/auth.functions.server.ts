@@ -18,7 +18,7 @@ import {
   setSessionCookie,
 } from "./session.server";
 import type { CurrentUser } from "./types";
-import { getCurrentUser } from "./user.server";
+import { getCurrentUser, getUserById } from "./user.server";
 
 const emailSchema = z.string().trim().email().max(255);
 const passwordSchema = z.string().min(8, "Password must be at least 8 characters").max(128);
@@ -74,7 +74,7 @@ export const signupWithPassword = createServerFn({ method: "POST" })
     const token = await createSession(userId);
     setSessionCookie(token);
 
-    const user = await getCurrentUser();
+    const user = await getUserById(userId);
     if (!user) {
       throw new Error("Account created but session could not be established.");
     }
@@ -109,7 +109,7 @@ export const loginWithPassword = createServerFn({ method: "POST" })
     const token = await createSession(userRow.id);
     setSessionCookie(token);
 
-    const user = await getCurrentUser();
+    const user = await getUserById(userRow.id);
     if (!user) {
       throw new Error("Login succeeded but session could not be established.");
     }

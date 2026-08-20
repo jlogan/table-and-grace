@@ -4,6 +4,7 @@ import { useState } from "react";
 import { z } from "zod";
 
 import { loginWithPassword } from "@/auth/auth.functions.server";
+import type { CurrentUser } from "@/auth/types";
 import { MemberLayout } from "@/components/gofofa/MemberLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,12 +18,11 @@ const loginSearchSchema = z.object({
 
 type AppPath = FileRouteTypes["to"];
 
-function safeRedirectPath(redirect: string | undefined): AppPath {
-  if (!redirect) return "/account";
-  if (redirect.startsWith("/") && !redirect.startsWith("//")) {
+function postLoginPath(redirect: string | undefined, user: CurrentUser): AppPath {
+  if (redirect?.startsWith("/") && !redirect.startsWith("//")) {
     return redirect as AppPath;
   }
-  return "/account";
+  return user.role === "admin" ? "/admin" : "/account";
 }
 
 export const Route = createFileRoute("/login")({
@@ -46,8 +46,11 @@ function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (user) {
+    const signedInDestination = postLoginPath(redirectTo, user);
+    const signedInLabel = user.role === "admin" ? "Go to admin" : "Go to my account";
+
     return (
-      <MemberLayout showBack backTo="/account" backLabel="Account" wordmarkTo={null}>
+      <MemberLayout showBack backTo={signedInDestination} backLabel="Back" wordmarkTo={null}>
         <Card>
           <CardContent className="pt-6 text-center">
             <p className="text-muted-foreground">
@@ -56,9 +59,9 @@ function LoginPage() {
             <Button
               type="button"
               className="mt-4 min-h-11 w-full"
-              onClick={() => navigate({ to: "/account" })}
+              onClick={() => navigate({ to: signedInDestination })}
             >
-              Go to my account
+              {signedInLabel}
             </Button>
           </CardContent>
         </Card>
@@ -71,9 +74,9 @@ function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await loginFn({ data: { email, password } });
+      const { user: loggedInUser } = await loginFn({ data: { email, password } });
       await router.invalidate();
-      await navigate({ to: safeRedirectPath(redirectTo), replace: true });
+      await navigate({ to: postLoginPath(redirectTo, loggedInUser), replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not log in. Please try again.");
     } finally {

@@ -20,7 +20,7 @@ export class AuthError extends Error {
   }
 }
 
-async function loadUserById(userId: string): Promise<CurrentUser | null> {
+export async function getUserById(userId: string): Promise<CurrentUser | null> {
   const db = getDb();
   const [row] = await db
     .select({
@@ -47,7 +47,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const userId = await findSessionUserId(token);
   if (!userId) return null;
 
-  return loadUserById(userId);
+  return getUserById(userId);
 }
 
 /** Require a logged-in user; throws AuthError when absent. */
