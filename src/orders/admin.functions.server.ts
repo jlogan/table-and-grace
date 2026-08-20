@@ -21,6 +21,12 @@ import {
   listAdminPlanCategories,
   updateAdminCustomer,
 } from "@/db/customers.server";
+import {
+  createAdminMenuItem,
+  listAdminMenuItems,
+  listAdminPlanCategoriesWithId,
+  updateAdminMenuItem,
+} from "@/db/catalog.server";
 import { membershipStatuses } from "@/db/schema/memberships";
 import { portionDefaults } from "@/db/schema/customer-profiles";
 import { paymentSchedules } from "@/db/schema/payment-schedules";
@@ -152,5 +158,46 @@ export const updateAdminCustomerProfile = createServerFn({ method: "POST" })
   .validator(updateCustomerSchema)
   .handler(async ({ data }) => {
     await updateAdminCustomer(data);
+    return { ok: true as const };
+  });
+
+export const fetchAdminMenuItems = createServerFn({ method: "GET" })
+  .middleware([requireRoleMiddleware("admin")])
+  .handler(async () => listAdminMenuItems());
+
+export const fetchAdminPlanCategoriesWithId = createServerFn({ method: "GET" })
+  .middleware([requireRoleMiddleware("admin")])
+  .handler(async () => listAdminPlanCategoriesWithId());
+
+const createMenuItemSchema = z.object({
+  name: z.string().trim().min(1).max(255),
+  note: z.string().trim().max(2000).optional(),
+  categoryId: z.string().uuid().optional(),
+  price4ozCents: z.number().int().min(0).max(999999).optional(),
+  price6ozCents: z.number().int().min(0).max(999999).optional(),
+});
+
+export const createAdminMenuItemRecord = createServerFn({ method: "POST" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(createMenuItemSchema)
+  .handler(async ({ data }) => {
+    const id = await createAdminMenuItem(data);
+    return { id };
+  });
+
+const updateMenuItemSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1).max(255).optional(),
+  note: z.string().trim().max(2000).nullable().optional(),
+  categoryId: z.string().uuid().nullable().optional(),
+  price4ozCents: z.number().int().min(0).max(999999).nullable().optional(),
+  price6ozCents: z.number().int().min(0).max(999999).nullable().optional(),
+});
+
+export const updateAdminMenuItemRecord = createServerFn({ method: "POST" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(updateMenuItemSchema)
+  .handler(async ({ data }) => {
+    await updateAdminMenuItem(data);
     return { ok: true as const };
   });

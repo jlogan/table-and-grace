@@ -28,6 +28,7 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminBatchesRouteImport } from './routes/admin/batches'
 import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
+import { Route as AdminItemsRouteImport } from './routes/admin/items'
 import { Route as AdminKitchenRouteImport } from './routes/admin/kitchen'
 import { Route as AdminMembershipsRouteImport } from './routes/admin/memberships'
 import { Route as AdminOrdersRouteImport } from './routes/admin/orders'
@@ -132,6 +133,11 @@ const AdminCustomersRoute = AdminCustomersRouteImport.update({
   path: '/customers',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminItemsRoute = AdminItemsRouteImport.update({
+  id: '/items',
+  path: '/items',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminKitchenRoute = AdminKitchenRouteImport.update({
   id: '/kitchen',
   path: '/kitchen',
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/batches': typeof AdminBatchesRoute
   '/admin/customers': typeof AdminCustomersRoute
+  '/admin/items': typeof AdminItemsRoute
   '/admin/kitchen': typeof AdminKitchenRoute
   '/admin/memberships': typeof AdminMembershipsRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -220,6 +227,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/batches': typeof AdminBatchesRoute
   '/admin/customers': typeof AdminCustomersRoute
+  '/admin/items': typeof AdminItemsRoute
   '/admin/kitchen': typeof AdminKitchenRoute
   '/admin/memberships': typeof AdminMembershipsRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -250,6 +258,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/batches': typeof AdminBatchesRoute
   '/admin/customers': typeof AdminCustomersRoute
+  '/admin/items': typeof AdminItemsRoute
   '/admin/kitchen': typeof AdminKitchenRoute
   '/admin/memberships': typeof AdminMembershipsRoute
   '/admin/orders': typeof AdminOrdersRoute
@@ -281,6 +290,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/admin/batches'
     | '/admin/customers'
+    | '/admin/items'
     | '/admin/kitchen'
     | '/admin/memberships'
     | '/admin/orders'
@@ -309,6 +319,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/admin/batches'
     | '/admin/customers'
+    | '/admin/items'
     | '/admin/kitchen'
     | '/admin/memberships'
     | '/admin/orders'
@@ -338,6 +349,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/admin/batches'
     | '/admin/customers'
+    | '/admin/items'
     | '/admin/kitchen'
     | '/admin/memberships'
     | '/admin/orders'
@@ -505,6 +517,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCustomersRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/items': {
+      id: '/admin/items'
+      path: '/items'
+      fullPath: '/admin/items'
+      preLoaderRoute: typeof AdminItemsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/kitchen': {
       id: '/admin/kitchen'
       path: '/kitchen'
@@ -567,6 +586,7 @@ declare module '@tanstack/react-router' {
 interface AdminRouteRouteChildren {
   AdminBatchesRoute: typeof AdminBatchesRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
+  AdminItemsRoute: typeof AdminItemsRoute
   AdminKitchenRoute: typeof AdminKitchenRoute
   AdminMembershipsRoute: typeof AdminMembershipsRoute
   AdminOrdersRoute: typeof AdminOrdersRoute
@@ -577,6 +597,7 @@ interface AdminRouteRouteChildren {
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminBatchesRoute: AdminBatchesRoute,
   AdminCustomersRoute: AdminCustomersRoute,
+  AdminItemsRoute: AdminItemsRoute,
   AdminKitchenRoute: AdminKitchenRoute,
   AdminMembershipsRoute: AdminMembershipsRoute,
   AdminOrdersRoute: AdminOrdersRoute,

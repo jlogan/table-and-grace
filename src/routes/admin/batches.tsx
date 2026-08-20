@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
+import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,8 @@ import {
 } from "@/orders/admin-types";
 import { formatPaymentSchedule } from "@/orders/review-types";
 
+type PageMode = "list" | "create" | "detail";
+
 export const Route = createFileRoute("/admin/batches")({
   beforeLoad: async () => {
     const [batches, pickupWindows, memberships] = await Promise.all([
@@ -74,9 +77,8 @@ function AdminBatchesPage() {
   const mealDemandFn = useServerFn(fetchBatchMealDemand);
 
   const [batches, setBatches] = useState(initialBatches);
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(
-    initialBatches[0]?.id ?? null,
-  );
+  const [mode, setMode] = useState<PageMode>("list");
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [inventory, setInventory] = useState<AdminBatchInventoryRow[]>([]);
   const [mealDemand, setMealDemand] = useState<BatchMealDemandRow[]>([]);
   const [memberships] = useState<AdminMembershipRow[]>(initialMemberships);
@@ -93,13 +95,6 @@ function AdminBatchesPage() {
   const canEditInventory =
     selectedBatch?.status === "planning" || selectedBatch?.status === "draft";
   const canPublish = canEditInventory && selectedBatch && selectedBatch.itemCount > 0;
-
-  useEffect(() => {
-    if (selectedBatchId) {
-      void loadInventory(selectedBatchId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load when initial selection is set
-  }, []);
 
   async function refreshBatches() {
     const next = await refreshBatchesFn();
@@ -125,10 +120,21 @@ function AdminBatchesPage() {
     }
   }
 
-  async function handleSelectBatch(batch: AdminBatchSummary) {
+  async function openBatchDetail(batch: AdminBatchSummary) {
     setSelectedBatchId(batch.id);
+    setMode("detail");
     setMessage(null);
     await loadInventory(batch.id);
+  }
+
+  function backToList() {
+    setMode("list");
+    setSelectedBatchId(null);
+    setInventory([]);
+    setMealDemand([]);
+    setInventoryDraft({});
+    setError(null);
+    setMessage(null);
   }
 
   async function handleCreateBatch() {
@@ -144,8 +150,7 @@ function AdminBatchesPage() {
       const next = await refreshBatches();
       const created = next.find((b) => b.id === result.batchId);
       if (created) {
-        setSelectedBatchId(created.id);
-        await loadInventory(created.id);
+        await openBatchDetail(created);
       }
       setMessage("Weekly batch created.");
     } catch (e) {
@@ -196,115 +201,170 @@ function AdminBatchesPage() {
 
   return (
     <>
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">Weekly batches</h2>
-        <p className="text-sm text-muted-foreground">
-          Create a batch, set menu inventory, then publish for customer review.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">Weekly batches</h2>
+          <p className="text-sm text-muted-foreground">
+            {mode === "list"
+              ? "Select a batch to manage inventory and publish, or create a new week."
+              : mode === "create"
+                ? "Opens a planning batch for the current week."
+                : "Set menu inventory, review member demand, then publish for customer review."}
+          </p>
+        </div>
+        {mode === "list" ? (
+          <Button onClick={() => setMode("create")}>Create new batch</Button>
+        ) : (
+          <Button variant="outline" onClick={backToList}>
+            <ArrowLeft className="size-4" />
+            All batches
+          </Button>
+        )}
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Create batch</CardTitle>
-          <CardDescription>Opens a planning batch for the current week.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-4">
-          {pickupWindows.length > 0 ? (
-            <div className="space-y-2">
-              <Label htmlFor="pickup-window">Default pickup window</Label>
-              <Select value={pickupWindowId} onValueChange={setPickupWindowId}>
-                <SelectTrigger id="pickup-window" className="w-[240px]">
-                  <SelectValue placeholder="Select pickup window" />
-                </SelectTrigger>
-                <SelectContent>
-                  {pickupWindows.map((pw) => (
-                    <SelectItem key={pw.id} value={pw.id}>
-                      {pw.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-          <Button onClick={handleCreateBatch} disabled={creating}>
-            {creating ? "Creating…" : "Create this week's batch"}
-          </Button>
-        </CardContent>
-      </Card>
+      {mode === "create" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Create batch</CardTitle>
+            <CardDescription>Opens a planning batch for the current week.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-end gap-4">
+            {pickupWindows.length > 0 ? (
+              <div className="space-y-2">
+                <Label htmlFor="pickup-window">Default pickup window</Label>
+                <Select value={pickupWindowId} onValueChange={setPickupWindowId}>
+                  <SelectTrigger id="pickup-window" className="w-[240px]">
+                    <SelectValue placeholder="Select pickup window" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pickupWindows.map((pw) => (
+                      <SelectItem key={pw.id} value={pw.id}>
+                        {pw.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <Button onClick={handleCreateBatch} disabled={creating}>
+              {creating ? "Creating…" : "Create this week's batch"}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">All batches</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Week of</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Pickup</TableHead>
-                <TableHead className="text-right">Orders</TableHead>
-                <TableHead className="text-right">Items</TableHead>
-                <TableHead>Review deadline</TableHead>
-                <TableHead className="w-[100px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {batches.length === 0 ? (
+      {mode === "list" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">All batches</CardTitle>
+            <CardDescription>{batches.length} batch(es)</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground">
-                    No batches yet.
-                  </TableCell>
+                  <TableHead>Week of</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Pickup</TableHead>
+                  <TableHead className="text-right">Orders</TableHead>
+                  <TableHead className="text-right">Items</TableHead>
+                  <TableHead>Review deadline</TableHead>
+                  <TableHead className="w-[140px]" />
                 </TableRow>
-              ) : (
-                batches.map((batch) => (
-                  <TableRow
-                    key={batch.id}
-                    data-state={batch.id === selectedBatchId ? "selected" : undefined}
-                    className="cursor-pointer"
-                    onClick={() => handleSelectBatch(batch)}
-                  >
-                    <TableCell className="font-medium">
-                      {formatDateString(batch.weekStart, "MMM d, yyyy")}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={batchStatusBadgeVariant(batch.status)}>
-                        {formatBatchStatus(batch.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{batch.pickupWindowLabel ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{batch.orderCount}</TableCell>
-                    <TableCell className="text-right tabular-nums">{batch.itemCount}</TableCell>
-                    <TableCell>
-                      {batch.reviewDeadline
-                        ? formatDateString(batch.reviewDeadline, "MMM d, h:mm a")
-                        : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {batch.orderCount > 0 ? (
-                        <Link
-                          to="/admin/orders"
-                          search={{ batchId: batch.id }}
-                          className="text-sm text-primary underline-offset-4 hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Orders
-                        </Link>
-                      ) : null}
+              </TableHeader>
+              <TableBody>
+                {batches.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-muted-foreground">
+                      No batches yet — create your first batch to get started.
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                ) : (
+                  batches.map((batch) => (
+                    <TableRow key={batch.id}>
+                      <TableCell className="font-medium">
+                        {formatDateString(batch.weekStart, "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={batchStatusBadgeVariant(batch.status)}>
+                          {formatBatchStatus(batch.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{batch.pickupWindowLabel ?? "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{batch.orderCount}</TableCell>
+                      <TableCell className="text-right tabular-nums">{batch.itemCount}</TableCell>
+                      <TableCell>
+                        {batch.reviewDeadline
+                          ? formatDateString(batch.reviewDeadline, "MMM d, h:mm a")
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openBatchDetail(batch)}
+                          >
+                            View
+                          </Button>
+                          {batch.orderCount > 0 ? (
+                            <Link
+                              to="/admin/orders"
+                              search={{ batchId: batch.id }}
+                              className="text-sm text-primary underline-offset-4 hover:underline"
+                            >
+                              Orders
+                            </Link>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      {selectedBatch ? (
+      {mode === "detail" && selectedBatch ? (
         <>
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base">
+                    Week of {formatDateString(selectedBatch.weekStart, "MMM d, yyyy")}
+                  </CardTitle>
+                  <CardDescription className="flex flex-wrap items-center gap-2 pt-1">
+                    <Badge variant={batchStatusBadgeVariant(selectedBatch.status)}>
+                      {formatBatchStatus(selectedBatch.status)}
+                    </Badge>
+                    <span>{selectedBatch.pickupWindowLabel ?? "No pickup window"}</span>
+                    {selectedBatch.reviewDeadline ? (
+                      <span>
+                        · Review by{" "}
+                        {formatDateString(selectedBatch.reviewDeadline, "MMM d, h:mm a")}
+                      </span>
+                    ) : null}
+                  </CardDescription>
+                </div>
+                {selectedBatch.orderCount > 0 ? (
+                  <Link
+                    to="/admin/orders"
+                    search={{ batchId: selectedBatch.id }}
+                    className="text-sm text-primary underline-offset-4 hover:underline"
+                  >
+                    View {selectedBatch.orderCount} order(s)
+                  </Link>
+                ) : null}
+              </div>
+            </CardHeader>
+          </Card>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -318,10 +378,10 @@ function AdminBatchesPage() {
                   <p className="text-sm text-muted-foreground">
                     No active members —{" "}
                     <Link
-                      to="/admin/customers"
+                      to="/admin/memberships"
                       className="text-primary underline-offset-4 hover:underline"
                     >
-                      add a pilot customer
+                      add a membership
                     </Link>
                     .
                   </p>
@@ -387,10 +447,7 @@ function AdminBatchesPage() {
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <CardTitle className="text-base">
-                    Batch inventory — week of{" "}
-                    {formatDateString(selectedBatch.weekStart, "MMM d, yyyy")}
-                  </CardTitle>
+                  <CardTitle className="text-base">Batch inventory</CardTitle>
                   <CardDescription>
                     Set cooked quantities from the active menu catalog.
                   </CardDescription>

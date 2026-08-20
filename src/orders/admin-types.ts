@@ -23,6 +23,25 @@ export type AdminMenuItemOption = {
   note: string | null;
 };
 
+export type AdminMenuItemRow = {
+  id: string;
+  slug: string;
+  name: string;
+  note: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  price4ozCents: number | null;
+  price6ozCents: number | null;
+  sortOrder: number;
+  active: boolean;
+};
+
+export type AdminPlanCategoryWithId = {
+  id: string;
+  slug: string;
+  name: string;
+};
+
 export type AdminBatchInventoryRow = {
   batchItemId: string | null;
   menuItemId: string;

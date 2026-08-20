@@ -69,7 +69,8 @@ function AdminOrdersPage() {
       <div>
         <h2 className="text-lg font-semibold tracking-tight text-foreground">Orders</h2>
         <p className="text-sm text-muted-foreground">
-          Per-batch order list with customer, status, and payment schedule.
+          Weekly orders with catalog menu items, portion sizes (4 oz / 6 oz), and line pricing from
+          the active item catalog.
         </p>
       </div>
 
@@ -83,7 +84,9 @@ function AdminOrdersPage() {
                   : "All batches"}
               </CardTitle>
               <CardDescription>
-                {loading ? "Loading…" : `${orders.length} order(s)`}
+                {loading
+                  ? "Loading…"
+                  : `${orders.length} order(s) · each line links to a catalog item with portion and unit price`}
               </CardDescription>
             </div>
             <div className="space-y-2">
@@ -113,7 +116,7 @@ function AdminOrdersPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Payment</TableHead>
                 <TableHead>Pickup</TableHead>
-                <TableHead className="text-right">Items</TableHead>
+                <TableHead className="text-right">Catalog lines</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Notes</TableHead>
               </TableRow>

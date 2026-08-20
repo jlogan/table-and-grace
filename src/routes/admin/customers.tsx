@@ -60,10 +60,9 @@ function AdminCustomersPage() {
   const refreshFn = useServerFn(fetchAdminCustomers);
 
   const [customers, setCustomers] = useState(initialCustomers);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [planSlug, setPlanSlug] = useState("");
-  const [mealsPerWeek, setMealsPerWeek] = useState("");
   const [paymentSchedule, setPaymentSchedule] = useState("weekly_autopay");
   const [pickupWindowId, setPickupWindowId] = useState(pickupWindows[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
@@ -89,16 +88,14 @@ function AdminCustomersPage() {
           paymentSchedule: paymentSchedule as
             "weekly_autopay" | "monthly_autopay" | "manual_per_order",
           defaultPickupWindowId: pickupWindowId || undefined,
-          planSlug: planSlug || undefined,
-          mealsPerWeek: mealsPerWeek ? Number(mealsPerWeek) : undefined,
+          activateMembership: false,
         },
       });
       setEmail("");
       setName("");
-      setPlanSlug("");
-      setMealsPerWeek("");
+      setShowAddForm(false);
       setMessage(
-        `Customer ${email} created — they can magic-link login when that flow is enabled.`,
+        `Customer ${email} created — add a membership on the Memberships page when ready.`,
       );
       await refreshCustomers();
     } catch (err) {
@@ -110,116 +107,93 @@ function AdminCustomersPage() {
 
   return (
     <>
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">Customers</h2>
-        <p className="text-sm text-muted-foreground">
-          Create pilot customers by email, assign pickup cadence and plan preferences. Pricing still
-          comes from menu items and portions at order time.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">Customers</h2>
+          <p className="text-sm text-muted-foreground">
+            Customer accounts and profile details. Memberships and plan preferences are managed
+            separately on the Memberships page.
+          </p>
+        </div>
+        {!showAddForm ? <Button onClick={() => setShowAddForm(true)}>Add customer</Button> : null}
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Add customer</CardTitle>
-          <CardDescription>
-            Email-only accounts are supported — no password required until they set one or use a
-            magic link.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleCreate} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="customer-email">Email</Label>
-              <Input
-                id="customer-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="customer-name">Name</Label>
-              <Input
-                id="customer-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Jay Logan"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="customer-plan">Plan type</Label>
-              <Select
-                value={planSlug || "none"}
-                onValueChange={(v) => setPlanSlug(v === "none" ? "" : v)}
-              >
-                <SelectTrigger id="customer-plan">
-                  <SelectValue placeholder="Select plan" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Not set</SelectItem>
-                  {planCategories.map((cat) => (
-                    <SelectItem key={cat.slug} value={cat.slug}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="customer-meals">Meals per week</Label>
-              <Input
-                id="customer-meals"
-                type="number"
-                min={1}
-                max={56}
-                value={mealsPerWeek}
-                onChange={(e) => setMealsPerWeek(e.target.value)}
-                placeholder="14"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="customer-payment">Payment cadence</Label>
-              <Select value={paymentSchedule} onValueChange={setPaymentSchedule}>
-                <SelectTrigger id="customer-payment">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="weekly_autopay">Weekly autopay</SelectItem>
-                  <SelectItem value="monthly_autopay">Monthly autopay</SelectItem>
-                  <SelectItem value="manual_per_order">Manual per order</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {pickupWindows.length > 0 ? (
+      {showAddForm ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Add customer</CardTitle>
+            <CardDescription>
+              Creates the customer account and profile only — no membership yet. Email-only accounts
+              are supported until they set a password or use a magic link.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreate} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="customer-pickup">Default pickup</Label>
-                <Select value={pickupWindowId} onValueChange={setPickupWindowId}>
-                  <SelectTrigger id="customer-pickup">
-                    <SelectValue placeholder="Pickup window" />
+                <Label htmlFor="customer-email">Email</Label>
+                <Input
+                  id="customer-email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="customer-name">Name</Label>
+                <Input
+                  id="customer-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Jay Logan"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="customer-payment">Payment cadence</Label>
+                <Select value={paymentSchedule} onValueChange={setPaymentSchedule}>
+                  <SelectTrigger id="customer-payment">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {pickupWindows.map((pw) => (
-                      <SelectItem key={pw.id} value={pw.id}>
-                        {pw.label}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="weekly_autopay">Weekly autopay</SelectItem>
+                    <SelectItem value="monthly_autopay">Monthly autopay</SelectItem>
+                    <SelectItem value="manual_per_order">Manual per order</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            ) : null}
-            <div className="flex items-end sm:col-span-2 lg:col-span-3">
-              <Button type="submit" disabled={creating}>
-                {creating ? "Creating…" : "Create customer & membership"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+              {pickupWindows.length > 0 ? (
+                <div className="space-y-2">
+                  <Label htmlFor="customer-pickup">Default pickup</Label>
+                  <Select value={pickupWindowId} onValueChange={setPickupWindowId}>
+                    <SelectTrigger id="customer-pickup">
+                      <SelectValue placeholder="Pickup window" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pickupWindows.map((pw) => (
+                        <SelectItem key={pw.id} value={pw.id}>
+                          {pw.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
+                <Button type="submit" disabled={creating}>
+                  {creating ? "Creating…" : "Create customer"}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setShowAddForm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -243,7 +217,7 @@ function AdminCustomersPage() {
               {customers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-muted-foreground">
-                    No customers yet — add yourself as a pilot customer above.
+                    No customers yet — add a customer to get started.
                   </TableCell>
                 </TableRow>
               ) : (

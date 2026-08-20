@@ -1,12 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   CalendarRange,
-  ChefHat,
   LayoutDashboard,
   Package,
   Repeat,
   Settings,
   ShoppingBag,
+  UtensilsCrossed,
   Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -40,8 +40,8 @@ const adminNavItems: Array<{
 }> = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/admin/batches", label: "Batches", icon: CalendarRange },
+  { to: "/admin/items", label: "Items", icon: UtensilsCrossed },
   { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
-  { to: "/admin/kitchen", label: "Kitchen", icon: ChefHat },
   { to: "/admin/customers", label: "Customers", icon: Users },
   { to: "/admin/memberships", label: "Memberships", icon: Repeat },
   { to: "/admin/settings", label: "Settings", icon: Settings },
