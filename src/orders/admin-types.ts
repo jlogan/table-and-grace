@@ -102,6 +102,10 @@ export type AdminCustomerRow = {
   name: string | null;
   role: UserRole;
   createdAt: string;
+  phone: string | null;
+  allergies: string | null;
+  /** Display tags only — excludes reserved plan:/meals: prefixes. */
+  dietaryTags: string[];
   membershipId: string | null;
   membershipStatus: MembershipStatus | null;
   paymentSchedule: PaymentSchedule;

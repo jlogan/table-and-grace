@@ -123,9 +123,19 @@ export const fetchBatchMealDemand = createServerFn({ method: "GET" })
   .validator(batchIdSchema)
   .handler(async ({ data }) => getBatchMealDemand(data.batchId));
 
+const dietaryTagsSchema = z
+  .array(z.string().trim().min(1).max(64))
+  .max(20)
+  .refine((tags) => !tags.some((t) => /^(plan|meals):/i.test(t)), {
+    message: 'Dietary tags cannot use reserved "plan:" or "meals:" prefixes.',
+  });
+
 const createCustomerSchema = z.object({
   email: z.string().trim().email().max(255),
   name: z.string().trim().max(255).optional(),
+  phone: z.string().trim().max(32).optional(),
+  allergies: z.string().trim().max(2000).optional(),
+  dietaryTags: dietaryTagsSchema.optional(),
   paymentSchedule: z.enum(paymentSchedules).optional(),
   portionDefault: z.enum(portionDefaults).optional(),
   defaultPickupWindowId: z.string().uuid().optional(),
@@ -145,7 +155,11 @@ export const createAdminCustomerAccount = createServerFn({ method: "POST" })
 
 const updateCustomerSchema = z.object({
   userId: z.string().uuid(),
+  email: z.string().trim().email().max(255).optional(),
   name: z.string().trim().max(255).optional(),
+  phone: z.string().trim().max(32).nullable().optional(),
+  allergies: z.string().trim().max(2000).nullable().optional(),
+  dietaryTags: dietaryTagsSchema.optional(),
   paymentSchedule: z.enum(paymentSchedules).optional(),
   portionDefault: z.enum(portionDefaults).optional(),
   defaultPickupWindowId: z.string().uuid().nullable().optional(),

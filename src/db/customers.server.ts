@@ -27,6 +27,42 @@ import { weeklyOrders } from "./schema/weekly-orders.ts";
 
 const PLAN_TAG_PREFIX = "plan:";
 const MEALS_TAG_PREFIX = "meals:";
+const RESERVED_TAG_PREFIX = /^(plan|meals):/i;
+
+function isReservedDietaryTag(tag: string): boolean {
+  return RESERVED_TAG_PREFIX.test(tag.trim());
+}
+
+export function displayDietaryTags(tags: string[] | null | undefined): string[] {
+  return (tags ?? []).filter((t) => !isReservedDietaryTag(t));
+}
+
+export function normalizeUserDietaryTags(tags: string[] | null | undefined): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const raw of tags ?? []) {
+    const tag = raw.trim();
+    if (!tag) continue;
+    if (isReservedDietaryTag(tag)) {
+      throw new Error('Dietary tags cannot use reserved "plan:" or "meals:" prefixes.');
+    }
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(tag);
+  }
+
+  return result;
+}
+
+function mergeProfileDietaryTags(
+  existing: string[] | null | undefined,
+  userTags: string[],
+): string[] {
+  const reservedTags = (existing ?? []).filter(isReservedDietaryTag);
+  return [...userTags, ...reservedTags];
+}
 
 export function parsePlanSlugFromTags(tags: string[] | null | undefined): string | null {
   if (!tags?.length) return null;
@@ -72,6 +108,8 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
       createdAt: users.createdAt,
       paymentSchedule: customerProfiles.paymentSchedule,
       portionDefault: customerProfiles.portionDefault,
+      phone: customerProfiles.phone,
+      allergies: customerProfiles.allergies,
       defaultPickupWindowId: customerProfiles.defaultPickupWindowId,
       pickupLabel: pickupWindows.label,
       chefNotes: customerProfiles.chefNotes,
@@ -153,6 +191,9 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
       name: row.name,
       role: row.role,
       createdAt: row.createdAt.toISOString(),
+      phone: row.phone,
+      allergies: row.allergies,
+      dietaryTags: displayDietaryTags(row.dietaryTags),
       membershipId: primaryMembership?.membershipId ?? null,
       membershipStatus: primaryMembership?.membershipStatus ?? null,
       paymentSchedule: row.paymentSchedule ?? "weekly_autopay",
@@ -241,6 +282,9 @@ export async function listAdminPlanCategories(): Promise<AdminPlanCategoryOption
 export type CreateAdminCustomerInput = {
   email: string;
   name?: string;
+  phone?: string;
+  allergies?: string;
+  dietaryTags?: string[];
   paymentSchedule?: PaymentSchedule;
   portionDefault?: PortionDefault;
   defaultPickupWindowId?: string;
@@ -266,7 +310,8 @@ export async function createAdminCustomer(input: CreateAdminCustomerInput): Prom
   }
 
   const userId = randomUUID();
-  const dietaryTags = mergePlanTags([], input.planSlug, input.mealsPerWeek);
+  const userTags = normalizeUserDietaryTags(input.dietaryTags ?? []);
+  const dietaryTags = mergePlanTags(userTags, input.planSlug, input.mealsPerWeek);
 
   await db.insert(users).values({
     id: userId,
@@ -278,6 +323,8 @@ export async function createAdminCustomer(input: CreateAdminCustomerInput): Prom
 
   await db.insert(customerProfiles).values({
     userId,
+    phone: input.phone?.trim() || null,
+    allergies: input.allergies?.trim() || null,
     paymentSchedule: input.paymentSchedule ?? "weekly_autopay",
     portionDefault: input.portionDefault ?? "6oz",
     defaultPickupWindowId: input.defaultPickupWindowId ?? null,
@@ -303,7 +350,11 @@ export async function createAdminCustomer(input: CreateAdminCustomerInput): Prom
 
 export type UpdateAdminCustomerInput = {
   userId: string;
+  email?: string;
   name?: string;
+  phone?: string | null;
+  allergies?: string | null;
+  dietaryTags?: string[];
   paymentSchedule?: PaymentSchedule;
   portionDefault?: PortionDefault;
   defaultPickupWindowId?: string | null;
@@ -337,28 +388,73 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
     throw new Error("Customer profile not found.");
   }
 
-  const nextPlanSlug =
-    input.planSlug === undefined ? parsePlanSlugFromTags(profile.dietaryTags) : input.planSlug;
-  const nextMealsPerWeek =
-    input.mealsPerWeek === undefined
-      ? parseMealsPerWeekFromTags(profile.dietaryTags)
-      : input.mealsPerWeek;
+  if (input.email !== undefined) {
+    const email = input.email.trim().toLowerCase();
+    const [existingEmail] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
 
-  const dietaryTags = mergePlanTags(profile.dietaryTags, nextPlanSlug, nextMealsPerWeek);
+    if (existingEmail && existingEmail.id !== input.userId) {
+      throw new Error(`A user with email ${email} already exists.`);
+    }
 
-  await db
-    .update(customerProfiles)
-    .set({
-      ...(input.paymentSchedule !== undefined ? { paymentSchedule: input.paymentSchedule } : {}),
-      ...(input.portionDefault !== undefined ? { portionDefault: input.portionDefault } : {}),
-      ...(input.defaultPickupWindowId !== undefined
-        ? { defaultPickupWindowId: input.defaultPickupWindowId }
-        : {}),
-      ...(input.chefNotes !== undefined ? { chefNotes: input.chefNotes } : {}),
-      dietaryTags: dietaryTags.length > 0 ? dietaryTags : null,
-      paymentScheduleSetBy: "admin",
-    })
-    .where(eq(customerProfiles.userId, input.userId));
+    await db.update(users).set({ email }).where(eq(users.id, input.userId));
+  }
+
+  const profileUpdates: {
+    paymentSchedule?: PaymentSchedule;
+    portionDefault?: PortionDefault;
+    phone?: string | null;
+    allergies?: string | null;
+    defaultPickupWindowId?: string | null;
+    chefNotes?: string | null;
+    dietaryTags?: string[] | null;
+    paymentScheduleSetBy: "admin";
+  } = { paymentScheduleSetBy: "admin" };
+
+  if (input.paymentSchedule !== undefined) {
+    profileUpdates.paymentSchedule = input.paymentSchedule;
+  }
+  if (input.portionDefault !== undefined) {
+    profileUpdates.portionDefault = input.portionDefault;
+  }
+  if (input.phone !== undefined) {
+    profileUpdates.phone = input.phone?.trim() || null;
+  }
+  if (input.allergies !== undefined) {
+    profileUpdates.allergies = input.allergies?.trim() || null;
+  }
+  if (input.defaultPickupWindowId !== undefined) {
+    profileUpdates.defaultPickupWindowId = input.defaultPickupWindowId;
+  }
+  if (input.chefNotes !== undefined) {
+    profileUpdates.chefNotes = input.chefNotes;
+  }
+
+  if (input.dietaryTags !== undefined) {
+    const userTags = normalizeUserDietaryTags(input.dietaryTags);
+    const merged = mergeProfileDietaryTags(profile.dietaryTags, userTags);
+    profileUpdates.dietaryTags = merged.length > 0 ? merged : null;
+  } else if (input.planSlug !== undefined || input.mealsPerWeek !== undefined) {
+    const nextPlanSlug =
+      input.planSlug === undefined ? parsePlanSlugFromTags(profile.dietaryTags) : input.planSlug;
+    const nextMealsPerWeek =
+      input.mealsPerWeek === undefined
+        ? parseMealsPerWeekFromTags(profile.dietaryTags)
+        : input.mealsPerWeek;
+    const merged = mergePlanTags(profile.dietaryTags, nextPlanSlug, nextMealsPerWeek);
+    profileUpdates.dietaryTags = merged.length > 0 ? merged : null;
+  }
+
+  const { paymentScheduleSetBy: _, ...setFields } = profileUpdates;
+  if (Object.keys(setFields).length > 0) {
+    await db
+      .update(customerProfiles)
+      .set(profileUpdates)
+      .where(eq(customerProfiles.userId, input.userId));
+  }
 
   if (input.name !== undefined) {
     await db
