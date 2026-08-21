@@ -114,7 +114,7 @@ export function formatPaymentSchedule(schedule: PaymentSchedule): string {
   const labels: Record<PaymentSchedule, string> = {
     weekly_autopay: "Weekly autopay",
     monthly_autopay: "Monthly autopay",
-    manual_per_order: "Pay per order",
+    manual_per_order: "Manual",
   };
   return labels[schedule] ?? schedule;
 }

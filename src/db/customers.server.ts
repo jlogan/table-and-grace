@@ -121,24 +121,6 @@ async function assertValidPlanSlug(db: Db, planSlug: string | null | undefined):
   }
 }
 
-async function assertNoBlockingMembership(
-  db: Db,
-  userId: string,
-  excludeMembershipId?: string,
-): Promise<void> {
-  const rows = await db
-    .select({ id: memberships.id })
-    .from(memberships)
-    .where(and(eq(memberships.userId, userId), inArray(memberships.status, ["active", "paused"])));
-
-  const blocking = rows.filter((row) => row.id !== excludeMembershipId);
-  if (blocking.length > 0) {
-    throw new Error(
-      "Customer already has an active or paused membership. Cancel or resume the existing one first.",
-    );
-  }
-}
-
 function assertPauseDateNotInPast(isoDate: string): void {
   const normalized = toIsoDateString(isoDate);
   if (!normalized) {
@@ -545,10 +527,6 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
       .orderBy(desc(memberships.updatedAt))
       .limit(1);
 
-    if (input.membershipStatus === "active" || input.membershipStatus === "paused") {
-      await assertNoBlockingMembership(db, input.userId, membership?.id);
-    }
-
     if (membership) {
       await db
         .update(memberships)
@@ -593,7 +571,6 @@ export async function createAdminMembership(input: CreateAdminMembershipInput): 
     throw new Error("Customer not found.");
   }
 
-  await assertNoBlockingMembership(db, input.userId);
   await assertValidPlanSlug(db, input.planSlug?.trim() || null);
 
   const billingProfile = input.billingProfile ?? "catalog";
@@ -674,10 +651,6 @@ export async function updateAdminMembership(input: UpdateAdminMembershipInput): 
 
   if (nextStatus === "active" && input.pausedUntil != null) {
     throw new Error("Active memberships cannot have a pause until date.");
-  }
-
-  if (nextStatus === "active" || nextStatus === "paused") {
-    await assertNoBlockingMembership(db, membership.userId, membership.id);
   }
 
   if (input.planSlug !== undefined) {

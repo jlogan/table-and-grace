@@ -250,9 +250,9 @@ function AdminBatchesPage() {
           <h2 className="text-lg font-semibold tracking-tight text-foreground">Weekly batches</h2>
           <p className="text-sm text-muted-foreground">
             {mode === "list"
-              ? "Select a batch to manage inventory and publish, or create a new week."
+              ? "Select a batch to manage inventory and publish, or create a new batch date."
               : mode === "create"
-                ? "Opens a planning batch for the current week."
+                ? "Opens a planning batch for today's batch date."
                 : "Set menu inventory, review member demand, then publish for customer review."}
           </p>
         </div>
@@ -273,12 +273,15 @@ function AdminBatchesPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Create batch</CardTitle>
-            <CardDescription>Opens a planning batch for the current week.</CardDescription>
+            <CardDescription>
+              Opens a planning batch for today's batch date. Pickup/delivery date controls are
+              coming in the next batch-planning pass.
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-end gap-4">
             {pickupWindows.length > 0 ? (
               <div className="space-y-2">
-                <Label htmlFor="pickup-window">Default pickup window</Label>
+                <Label htmlFor="pickup-window">Pickup / delivery window</Label>
                 <Select value={pickupWindowId} onValueChange={setPickupWindowId}>
                   <SelectTrigger id="pickup-window" className="w-[240px]">
                     <SelectValue placeholder="Select pickup window" />
@@ -294,7 +297,7 @@ function AdminBatchesPage() {
               </div>
             ) : null}
             <Button onClick={handleCreateBatch} disabled={creating}>
-              {creating ? "Creating…" : "Create this week's batch"}
+              {creating ? "Creating…" : "Create batch"}
             </Button>
           </CardContent>
         </Card>
@@ -310,9 +313,9 @@ function AdminBatchesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Week of</TableHead>
+                  <TableHead>Batch date</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Pickup</TableHead>
+                  <TableHead>Pickup / delivery</TableHead>
                   <TableHead className="text-right">Orders</TableHead>
                   <TableHead className="text-right">Items</TableHead>
                   <TableHead>Review deadline</TableHead>
@@ -323,7 +326,7 @@ function AdminBatchesPage() {
                 {batches.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-muted-foreground">
-                      No batches yet — create your first batch to get started.
+                      No batches yet — create your first batch date to get started.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -381,7 +384,7 @@ function AdminBatchesPage() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <CardTitle className="text-base">
-                    Week of {formatDateString(selectedBatch.weekStart, "MMM d, yyyy")}
+                    Batch date {formatDateString(selectedBatch.weekStart, "MMM d, yyyy")}
                   </CardTitle>
                   <CardDescription className="flex flex-wrap items-center gap-2 pt-1">
                     <Badge variant={batchStatusBadgeVariant(selectedBatch.status)}>

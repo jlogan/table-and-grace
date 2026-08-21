@@ -164,8 +164,9 @@ function AdminMembershipsPage() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-foreground">Memberships</h2>
           <p className="text-sm text-muted-foreground">
-            Assign plan and billing preferences per membership. Each customer may have one active or
-            paused membership at a time; cancelled memberships remain in history.
+            Assign plan and billing preferences per membership. Customers may have multiple active
+            memberships when they need separate plans or billing setups; cancelled memberships
+            remain in history.
           </p>
         </div>
         {!showAddForm && !editingMembership ? (
