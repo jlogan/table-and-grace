@@ -13,7 +13,13 @@ import type {
 import { isMembershipBatchEligible } from "@/orders/admin-types.ts";
 import { toIsoDateString } from "@/lib/dates.ts";
 
-import { listAdminBatches, listAdminOrders } from "./batches.server.ts";
+import {
+  listAdminBatches,
+  listAdminOrders,
+  listPublishEligibleMembers,
+  orderBatchInventory,
+  assignMealsRoundRobin,
+} from "./batches.server.ts";
 import { getDb } from "./index.server.ts";
 import { batchItems } from "./schema/batch-items.ts";
 import { customerProfiles } from "./schema/customer-profiles.ts";
@@ -775,6 +781,38 @@ export async function getBatchMealDemand(batchId: string): Promise<BatchMealDema
       qtyNeeded: demand?.qtyNeeded ?? 0,
       qtyCooked: inventory?.qtyCooked ?? 0,
       qtyRemaining: inventory?.qtyRemaining ?? 0,
+    });
+  }
+
+  return results.sort((a, b) => a.menuItemName.localeCompare(b.menuItemName));
+}
+
+/** Pre-publish meal demand from active memberships and saved batch inventory. */
+export async function getBatchProjectedMealDemand(batchId: string): Promise<BatchMealDemandRow[]> {
+  const { eligible } = await listPublishEligibleMembers();
+  const inventory = await orderBatchInventory(batchId);
+  const inventoryMenuItemIds = inventory.map((item) => item.menuItemId);
+
+  const projectedByItem = new Map<string, number>();
+  for (const member of eligible) {
+    const assigned = assignMealsRoundRobin(member.mealsPerWeek, inventoryMenuItemIds);
+    for (const [menuItemId, qty] of assigned) {
+      projectedByItem.set(menuItemId, (projectedByItem.get(menuItemId) ?? 0) + qty);
+    }
+  }
+
+  const inventoryByItem = new Map(inventory.map((row) => [row.menuItemId, row]));
+  const itemIds = new Set([...projectedByItem.keys(), ...inventory.map((row) => row.menuItemId)]);
+
+  const results: BatchMealDemandRow[] = [];
+  for (const menuItemId of itemIds) {
+    const inventoryRow = inventoryByItem.get(menuItemId);
+    results.push({
+      menuItemId,
+      menuItemName: inventoryRow?.menuItemName ?? "Unknown item",
+      qtyNeeded: projectedByItem.get(menuItemId) ?? 0,
+      qtyCooked: inventoryRow?.qtyCooked ?? 0,
+      qtyRemaining: inventoryRow?.qtyRemaining ?? 0,
     });
   }
 

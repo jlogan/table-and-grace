@@ -1,7 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
+import { z } from "zod";
+
+import { requireRoleMiddleware } from "@/auth/middleware.server";
+import { listPublishEligibleMembers, type PublishEligibility } from "@/db/batches.server";
+import { getBatchProjectedMealDemand } from "@/db/customers.server";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +33,6 @@ import { formatDateString } from "@/lib/dates";
 import {
   createAdminWeeklyBatch,
   fetchAdminBatches,
-  fetchAdminMemberships,
   fetchAdminPickupWindows,
   fetchBatchInventory,
   fetchBatchMealDemand,
@@ -37,25 +42,33 @@ import {
 import {
   batchStatusBadgeVariant,
   formatBatchStatus,
-  formatMembershipStatus,
-  membershipStatusBadgeVariant,
   type AdminBatchInventoryRow,
   type AdminBatchSummary,
-  type AdminMembershipRow,
   type BatchMealDemandRow,
 } from "@/orders/admin-types";
-import { formatPaymentSchedule } from "@/orders/review-types";
+
+const batchIdSchema = z.object({
+  batchId: z.string().uuid(),
+});
+
+const fetchBatchProjectedMealDemand = createServerFn({ method: "GET" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(batchIdSchema)
+  .handler(async ({ data }) => getBatchProjectedMealDemand(data.batchId));
+
+const fetchBatchPublishEligibility = createServerFn({ method: "GET" })
+  .middleware([requireRoleMiddleware("admin")])
+  .handler(async () => listPublishEligibleMembers());
 
 type PageMode = "list" | "create" | "detail";
 
 export const Route = createFileRoute("/admin/batches")({
   beforeLoad: async () => {
-    const [batches, pickupWindows, memberships] = await Promise.all([
+    const [batches, pickupWindows] = await Promise.all([
       fetchAdminBatches(),
       fetchAdminPickupWindows(),
-      fetchAdminMemberships(),
     ]);
-    return { batches, pickupWindows, memberships };
+    return { batches, pickupWindows };
   },
   head: () => ({
     meta: [{ title: "Batches — GOFOFA Ops" }],
@@ -64,24 +77,22 @@ export const Route = createFileRoute("/admin/batches")({
 });
 
 function AdminBatchesPage() {
-  const {
-    batches: initialBatches,
-    pickupWindows,
-    memberships: initialMemberships,
-  } = Route.useRouteContext();
+  const { batches: initialBatches, pickupWindows } = Route.useRouteContext();
   const createFn = useServerFn(createAdminWeeklyBatch);
   const inventoryFn = useServerFn(fetchBatchInventory);
   const saveInventoryFn = useServerFn(saveAdminBatchInventory);
   const publishFn = useServerFn(publishAdminWeeklyBatch);
   const refreshBatchesFn = useServerFn(fetchAdminBatches);
   const mealDemandFn = useServerFn(fetchBatchMealDemand);
+  const projectedMealDemandFn = useServerFn(fetchBatchProjectedMealDemand);
+  const publishEligibilityFn = useServerFn(fetchBatchPublishEligibility);
 
   const [batches, setBatches] = useState(initialBatches);
   const [mode, setMode] = useState<PageMode>("list");
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [inventory, setInventory] = useState<AdminBatchInventoryRow[]>([]);
   const [mealDemand, setMealDemand] = useState<BatchMealDemandRow[]>([]);
-  const [memberships] = useState<AdminMembershipRow[]>(initialMemberships);
+  const [publishEligibility, setPublishEligibility] = useState<PublishEligibility | null>(null);
   const [inventoryDraft, setInventoryDraft] = useState<Record<string, number>>({});
   const [pickupWindowId, setPickupWindowId] = useState(pickupWindows[0]?.id ?? "");
   const [loadingInventory, setLoadingInventory] = useState(false);
@@ -94,7 +105,30 @@ function AdminBatchesPage() {
   const selectedBatch = batches.find((b) => b.id === selectedBatchId) ?? null;
   const canEditInventory =
     selectedBatch?.status === "planning" || selectedBatch?.status === "draft";
-  const canPublish = canEditInventory && selectedBatch && selectedBatch.itemCount > 0;
+  const showProjectedDemand = canEditInventory;
+  const savedInventoryCount =
+    inventory.filter((row) => row.qtyCooked > 0).length || selectedBatch?.itemCount || 0;
+  const eligibleMembers = publishEligibility?.eligible ?? [];
+  const eligibleCount = eligibleMembers.length;
+  const excludedInactiveCount = publishEligibility?.excludedInactiveCount ?? 0;
+  const unresolvedMembers = publishEligibility?.unresolved ?? [];
+  const projectedTotalMeals = eligibleMembers.reduce((sum, member) => sum + member.mealsPerWeek, 0);
+  const publishBlockReasons: string[] = [];
+  if (!canEditInventory) {
+    publishBlockReasons.push("Batch is not in planning or draft.");
+  }
+  if (savedInventoryCount === 0) {
+    publishBlockReasons.push("Save batch inventory with at least one item before publishing.");
+  }
+  if (eligibleCount === 0) {
+    publishBlockReasons.push("No active memberships are eligible for this batch.");
+  }
+  if (unresolvedMembers.length > 0) {
+    publishBlockReasons.push(
+      `${unresolvedMembers.length} active member(s) need meals per week set before publishing.`,
+    );
+  }
+  const canPublish = publishBlockReasons.length === 0;
 
   async function refreshBatches() {
     const next = await refreshBatchesFn();
@@ -102,17 +136,22 @@ function AdminBatchesPage() {
     return next;
   }
 
-  async function loadInventory(batchId: string) {
+  async function loadInventory(batchId: string, batchStatus?: AdminBatchSummary["status"]) {
     setLoadingInventory(true);
     setError(null);
     try {
-      const [rows, demand] = await Promise.all([
+      const isPrePublish = batchStatus === "planning" || batchStatus === "draft";
+      const [rows, demand, eligibility] = await Promise.all([
         inventoryFn({ data: { batchId } }),
-        mealDemandFn({ data: { batchId } }),
+        isPrePublish
+          ? projectedMealDemandFn({ data: { batchId } })
+          : mealDemandFn({ data: { batchId } }),
+        isPrePublish ? publishEligibilityFn() : Promise.resolve(null),
       ]);
       setInventory(rows);
       setInventoryDraft(Object.fromEntries(rows.map((r) => [r.menuItemId, r.qtyCooked])));
       setMealDemand(demand);
+      setPublishEligibility(eligibility);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load inventory.");
     } finally {
@@ -124,7 +163,7 @@ function AdminBatchesPage() {
     setSelectedBatchId(batch.id);
     setMode("detail");
     setMessage(null);
-    await loadInventory(batch.id);
+    await loadInventory(batch.id, batch.status);
   }
 
   function backToList() {
@@ -132,6 +171,7 @@ function AdminBatchesPage() {
     setSelectedBatchId(null);
     setInventory([]);
     setMealDemand([]);
+    setPublishEligibility(null);
     setInventoryDraft({});
     setError(null);
     setMessage(null);
@@ -174,6 +214,9 @@ function AdminBatchesPage() {
       setInventory(rows);
       setInventoryDraft(Object.fromEntries(rows.map((r) => [r.menuItemId, r.qtyCooked])));
       await refreshBatches();
+      if (selectedBatch) {
+        await loadInventory(selectedBatchId, selectedBatch.status);
+      }
       setMessage("Inventory saved.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save inventory.");
@@ -189,8 +232,9 @@ function AdminBatchesPage() {
     setMessage(null);
     try {
       const result = await publishFn({ data: { batchId: selectedBatchId } });
-      await refreshBatches();
-      await loadInventory(selectedBatchId);
+      const next = await refreshBatches();
+      const published = next.find((b) => b.id === selectedBatchId);
+      await loadInventory(selectedBatchId, published?.status);
       setMessage(`Published — ${result.ordersCreated} order(s) sent for customer review.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not publish batch.");
@@ -368,75 +412,112 @@ function AdminBatchesPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Upcoming members</CardTitle>
+                <CardTitle className="text-base">Eligible members</CardTitle>
                 <CardDescription>
-                  Active memberships included when you publish this batch
+                  {eligibleCount} active membership{eligibleCount === 1 ? "" : "s"} will receive
+                  orders when you publish
+                  {excludedInactiveCount > 0
+                    ? ` · ${excludedInactiveCount} paused or cancelled excluded`
+                    : ""}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {memberships.length === 0 ? (
+                {eligibleCount === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No active members —{" "}
+                    No eligible active members —{" "}
                     <Link
                       to="/admin/memberships"
                       className="text-primary underline-offset-4 hover:underline"
                     >
-                      add a membership
+                      activate a membership
                     </Link>
                     .
                   </p>
                 ) : (
-                  <ul className="space-y-3 text-sm">
-                    {memberships.slice(0, 6).map((member) => {
-                      const label = member.name?.trim() || member.email;
-                      return (
-                        <li
-                          key={member.membershipId}
-                          className="border-b border-border pb-2 last:border-0"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="font-medium">{label}</span>
-                            <Badge variant={membershipStatusBadgeVariant(member.membershipStatus)}>
-                              {formatMembershipStatus(member.membershipStatus)}
-                            </Badge>
-                          </div>
-                          <p className="mt-1 text-muted-foreground">
-                            {member.planName ?? "Plan TBD"}
-                            {member.mealsPerWeek ? ` · ${member.mealsPerWeek} meals/wk` : ""}
-                            {" · "}
-                            {formatPaymentSchedule(member.paymentSchedule)}
-                          </p>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <>
+                    <p className="mb-3 text-sm text-muted-foreground">
+                      Projected total meal demand:{" "}
+                      <span className="font-medium text-foreground tabular-nums">
+                        {projectedTotalMeals}
+                      </span>
+                    </p>
+                    <ul className="space-y-3 text-sm">
+                      {eligibleMembers.slice(0, 6).map((member) => {
+                        const label = member.name?.trim() || member.email;
+                        return (
+                          <li
+                            key={member.membershipId}
+                            className="border-b border-border pb-2 last:border-0"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-medium">{label}</span>
+                              <Badge variant="default">Active</Badge>
+                            </div>
+                            <p className="mt-1 text-muted-foreground">
+                              {member.mealsPerWeek} meal{member.mealsPerWeek === 1 ? "" : "s"}/wk
+                              {" · "}
+                              {member.portionDefault} portion
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {eligibleCount > 6 ? (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        + {eligibleCount - 6} more eligible member
+                        {eligibleCount - 6 === 1 ? "" : "s"}
+                      </p>
+                    ) : null}
+                  </>
                 )}
+                {unresolvedMembers.length > 0 ? (
+                  <p className="mt-3 text-sm text-destructive">
+                    {unresolvedMembers.length} active member
+                    {unresolvedMembers.length === 1 ? "" : "s"} missing meals per week:{" "}
+                    {unresolvedMembers
+                      .slice(0, 3)
+                      .map((member) => member.name?.trim() || member.email)
+                      .join(", ")}
+                    {unresolvedMembers.length > 3 ? "…" : ""}
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Meals needed this batch</CardTitle>
-                <CardDescription>Order demand vs cooked inventory</CardDescription>
+                <CardDescription>
+                  {showProjectedDemand
+                    ? "Projected demand vs cooked inventory (before publish)"
+                    : "Actual order-line demand vs cooked inventory (after publish)"}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {mealDemand.filter((r) => r.qtyNeeded > 0 || r.qtyCooked > 0).length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Publish the batch or save inventory to see meal totals.
+                    {showProjectedDemand
+                      ? "Save inventory and add eligible active members to see projected meal totals."
+                      : "No meal demand recorded for this batch yet."}
                   </p>
                 ) : (
                   <ul className="space-y-2 text-sm">
                     {mealDemand
                       .filter((r) => r.qtyNeeded > 0 || r.qtyCooked > 0)
                       .slice(0, 8)
-                      .map((row) => (
-                        <li key={row.menuItemId} className="flex justify-between gap-4">
-                          <span className="truncate">{row.menuItemName}</span>
-                          <span className="shrink-0 tabular-nums text-muted-foreground">
-                            need {row.qtyNeeded} / cooked {row.qtyCooked}
-                          </span>
-                        </li>
-                      ))}
+                      .map((row) => {
+                        const shortage = Math.max(0, row.qtyNeeded - row.qtyCooked);
+                        return (
+                          <li key={row.menuItemId} className="flex justify-between gap-4">
+                            <span className="truncate">{row.menuItemName}</span>
+                            <span className="shrink-0 tabular-nums text-muted-foreground">
+                              {showProjectedDemand ? "projected" : "need"} {row.qtyNeeded} / cooked{" "}
+                              {row.qtyCooked}
+                              {shortage > 0 ? ` · short ${shortage}` : ""}
+                            </span>
+                          </li>
+                        );
+                      })}
                   </ul>
                 )}
               </CardContent>
@@ -465,6 +546,9 @@ function AdminBatchesPage() {
                   </Button>
                 </div>
               </div>
+              {!canPublish && canEditInventory && publishBlockReasons.length > 0 ? (
+                <p className="text-sm text-muted-foreground">{publishBlockReasons.join(" ")}</p>
+              ) : null}
             </CardHeader>
             <CardContent className="p-0">
               {loadingInventory ? (

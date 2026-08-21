@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type {
   AdminBatchInventoryRow,
@@ -26,6 +26,64 @@ import { weeklyBatches, type BatchStatus } from "./schema/weekly-batches.ts";
 import { weeklyOrders } from "./schema/weekly-orders.ts";
 
 const PUBLISHABLE_BATCH_STATUSES: BatchStatus[] = ["planning", "draft"];
+const MEALS_TAG_PREFIX = "meals:";
+
+export type PublishEligibleMember = {
+  membershipId: string;
+  userId: string;
+  email: string;
+  name: string | null;
+  mealsPerWeek: number;
+  portionDefault: Portion;
+  defaultPickupWindowId: string | null;
+};
+
+export type PublishEligibility = {
+  eligible: PublishEligibleMember[];
+  unresolved: Array<{ userId: string; email: string; name: string | null }>;
+  excludedInactiveCount: number;
+};
+
+function parseMealsPerWeekFromTags(tags: string[] | null | undefined): number | null {
+  if (!tags?.length) return null;
+  const tag = tags.find((t) => t.startsWith(MEALS_TAG_PREFIX));
+  if (!tag) return null;
+  const value = Number.parseInt(tag.slice(MEALS_TAG_PREFIX.length), 10);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export function resolveMemberMealsPerWeek(
+  mealsPerWeek: number | null | undefined,
+  dietaryTags: string[] | null | undefined,
+): number | null {
+  if (mealsPerWeek != null && mealsPerWeek > 0) {
+    return Math.floor(mealsPerWeek);
+  }
+  return parseMealsPerWeekFromTags(dietaryTags);
+}
+
+/** Round-robin meal slots across ordered inventory; collapsed per menu item. */
+export function assignMealsRoundRobin(
+  mealsRequired: number,
+  inventoryMenuItemIds: string[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  if (mealsRequired <= 0 || inventoryMenuItemIds.length === 0) {
+    return counts;
+  }
+
+  for (let i = 0; i < mealsRequired; i++) {
+    const menuItemId = inventoryMenuItemIds[i % inventoryMenuItemIds.length]!;
+    counts.set(menuItemId, (counts.get(menuItemId) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+function formatMemberLabel(name: string | null, email: string): string {
+  const trimmed = name?.trim();
+  return trimmed ? `${trimmed} (${email})` : email;
+}
 
 function weekStartMonday(base = new Date()): Date {
   const d = new Date(base);
@@ -287,43 +345,115 @@ export async function saveBatchInventory(input: SaveBatchInventoryInput): Promis
   }
 }
 
-async function resolvePublishCustomers(): Promise<
-  Array<{ userId: string; portionDefault: Portion; defaultPickupWindowId: string | null }>
+export async function listPublishEligibleMembers(): Promise<PublishEligibility> {
+  const db = getDb();
+
+  const [inactiveCountRow] = await db
+    .select({ count: sql<number>`count(*)`.mapWith(Number) })
+    .from(memberships)
+    .where(inArray(memberships.status, ["paused", "cancelled"]));
+
+  const activeRows = await db
+    .select({
+      membershipId: memberships.id,
+      userId: memberships.userId,
+      email: users.email,
+      name: users.name,
+      mealsPerWeek: memberships.mealsPerWeek,
+      dietaryTags: customerProfiles.dietaryTags,
+      portionDefault: memberships.portionDefault,
+      defaultPickupWindowId: customerProfiles.defaultPickupWindowId,
+      updatedAt: memberships.updatedAt,
+    })
+    .from(memberships)
+    .innerJoin(users, eq(memberships.userId, users.id))
+    .innerJoin(customerProfiles, eq(memberships.userId, customerProfiles.userId))
+    .where(eq(memberships.status, "active"))
+    .orderBy(desc(memberships.updatedAt), asc(memberships.id));
+
+  const byUser = new Map<string, (typeof activeRows)[number]>();
+  for (const row of activeRows) {
+    if (!byUser.has(row.userId)) {
+      byUser.set(row.userId, row);
+    }
+  }
+
+  const eligible: PublishEligibleMember[] = [];
+  const unresolved: PublishEligibility["unresolved"] = [];
+
+  for (const row of byUser.values()) {
+    const resolvedMeals = resolveMemberMealsPerWeek(row.mealsPerWeek, row.dietaryTags);
+    if (resolvedMeals == null) {
+      unresolved.push({ userId: row.userId, email: row.email, name: row.name });
+      continue;
+    }
+
+    eligible.push({
+      membershipId: row.membershipId,
+      userId: row.userId,
+      email: row.email,
+      name: row.name,
+      mealsPerWeek: resolvedMeals,
+      portionDefault: row.portionDefault,
+      defaultPickupWindowId: row.defaultPickupWindowId,
+    });
+  }
+
+  eligible.sort((a, b) => a.email.localeCompare(b.email));
+
+  return {
+    eligible,
+    unresolved,
+    excludedInactiveCount: inactiveCountRow?.count ?? 0,
+  };
+}
+
+export async function orderBatchInventory(batchId: string): Promise<
+  Array<{
+    menuItemId: string;
+    menuItemName: string;
+    qtyCooked: number;
+    qtyRemaining: number;
+  }>
 > {
   const db = getDb();
 
-  const activeMembers = await db
-    .select({
-      userId: memberships.userId,
-      portionDefault: memberships.portionDefault,
-      defaultPickupWindowId: customerProfiles.defaultPickupWindowId,
-    })
-    .from(memberships)
-    .innerJoin(customerProfiles, eq(memberships.userId, customerProfiles.userId))
-    .where(eq(memberships.status, "active"));
-
-  if (activeMembers.length > 0) {
-    const byUser = new Map<string, (typeof activeMembers)[number]>();
-    for (const member of activeMembers) {
-      if (!byUser.has(member.userId)) {
-        byUser.set(member.userId, member);
-      }
-    }
-    return [...byUser.values()];
-  }
-
   return db
     .select({
-      userId: customerProfiles.userId,
-      portionDefault: customerProfiles.portionDefault,
-      defaultPickupWindowId: customerProfiles.defaultPickupWindowId,
+      menuItemId: batchItems.menuItemId,
+      menuItemName: menuItems.name,
+      qtyCooked: batchItems.qtyCooked,
+      qtyRemaining: batchItems.qtyRemaining,
     })
-    .from(customerProfiles)
-    .innerJoin(users, eq(customerProfiles.userId, users.id))
-    .where(eq(users.role, "customer"));
+    .from(batchItems)
+    .innerJoin(menuItems, eq(batchItems.menuItemId, menuItems.id))
+    .where(and(eq(batchItems.batchId, batchId), sql`${batchItems.qtyCooked} > 0`))
+    .orderBy(asc(menuItems.sortOrder), asc(menuItems.name), asc(menuItems.id));
 }
 
-/** Open customer review: create pending orders for active members / existing customers. */
+function assertPublishPreconditions(
+  eligibility: PublishEligibility,
+  inventory: Awaited<ReturnType<typeof orderBatchInventory>>,
+): PublishEligibleMember[] {
+  if (eligibility.unresolved.length > 0) {
+    const member = eligibility.unresolved[0]!;
+    throw new Error(
+      `Cannot publish: ${formatMemberLabel(member.name, member.email)} has no meals per week set. Update their membership or add a valid meals:N tag.`,
+    );
+  }
+
+  if (eligibility.eligible.length === 0) {
+    throw new Error("Cannot publish: no active memberships.");
+  }
+
+  if (inventory.length === 0) {
+    throw new Error("Add batch inventory before publishing.");
+  }
+
+  return eligibility.eligible;
+}
+
+/** Open customer review: create pending orders for active members only. */
 export async function publishWeeklyBatch(batchId: string): Promise<{ ordersCreated: number }> {
   const db = getDb();
 
@@ -341,18 +471,11 @@ export async function publishWeeklyBatch(batchId: string): Promise<{ ordersCreat
     throw new Error("Only planning or draft batches can be published.");
   }
 
-  const inventory = await db
-    .select({
-      menuItemId: batchItems.menuItemId,
-      qtyRemaining: batchItems.qtyRemaining,
-    })
-    .from(batchItems)
-    .where(and(eq(batchItems.batchId, batchId), sql`${batchItems.qtyRemaining} > 0`))
-    .limit(6);
+  const eligibility = await listPublishEligibleMembers();
+  const inventory = await orderBatchInventory(batchId);
+  const customers = assertPublishPreconditions(eligibility, inventory);
 
-  if (inventory.length === 0) {
-    throw new Error("Add batch inventory before publishing.");
-  }
+  const inventoryMenuItemIds = inventory.map((item) => item.menuItemId);
 
   const menuDetails = await db
     .select({
@@ -362,12 +485,7 @@ export async function publishWeeklyBatch(batchId: string): Promise<{ ordersCreat
       price6ozCents: menuItems.price6ozCents,
     })
     .from(menuItems)
-    .where(
-      inArray(
-        menuItems.id,
-        inventory.map((i) => i.menuItemId),
-      ),
-    );
+    .where(inArray(menuItems.id, inventoryMenuItemIds));
 
   const categoryIds = menuDetails.map((m) => m.categoryId).filter(Boolean) as string[];
   const categories =
@@ -385,14 +503,12 @@ export async function publishWeeklyBatch(batchId: string): Promise<{ ordersCreat
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const menuById = new Map(menuDetails.map((m) => [m.id, m]));
 
-  const customers = await resolvePublishCustomers();
   const existingOrders = await db
     .select({ userId: weeklyOrders.userId })
     .from(weeklyOrders)
     .where(eq(weeklyOrders.batchId, batchId));
 
   const existingUserIds = new Set(existingOrders.map((o) => o.userId));
-  const mealsForLines = inventory.slice(0, 3);
 
   let ordersCreated = 0;
 
@@ -401,6 +517,7 @@ export async function publishWeeklyBatch(batchId: string): Promise<{ ordersCreat
 
     const orderId = randomUUID();
     const pickupWindowId = customer.defaultPickupWindowId ?? batch.pickupWindowId;
+    const assignedMeals = assignMealsRoundRobin(customer.mealsPerWeek, inventoryMenuItemIds);
 
     await db.insert(weeklyOrders).values({
       id: orderId,
@@ -413,19 +530,18 @@ export async function publishWeeklyBatch(batchId: string): Promise<{ ordersCreat
       totalCents: 0,
     });
 
-    for (const [index, meal] of mealsForLines.entries()) {
-      const menuItem = menuById.get(meal.menuItemId);
-      if (!menuItem) continue;
+    for (const [menuItemId, qty] of assignedMeals) {
+      const menuItem = menuById.get(menuItemId);
+      if (!menuItem || qty <= 0) continue;
 
       const category = menuItem.categoryId ? (categoryById.get(menuItem.categoryId) ?? null) : null;
       const portion = customer.portionDefault;
       const unitPriceCents = resolveUnitPriceCents(menuItem, category, portion);
-      const qty = index === 0 ? 2 : 1;
 
       await db.insert(orderLines).values({
         id: randomUUID(),
         orderId,
-        menuItemId: meal.menuItemId,
+        menuItemId,
         portion,
         qty,
         unitPriceCents,
