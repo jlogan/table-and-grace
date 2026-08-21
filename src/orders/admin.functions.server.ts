@@ -199,6 +199,11 @@ export const createAdminMembershipRecord = createServerFn({ method: "POST" })
 const updateMembershipSchema = z.object({
   membershipId: z.string().uuid(),
   membershipStatus: z.enum(membershipStatuses).optional(),
+  pausedUntil: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
   planSlug: z.string().trim().max(64).nullable().optional(),
   mealsPerWeek: z.number().int().min(1).max(56).nullable().optional(),
   portionDefault: z.enum(portionDefaults).optional(),

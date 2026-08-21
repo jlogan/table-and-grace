@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { parseISO } from "date-fns";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type {
@@ -9,6 +10,8 @@ import type {
   AdminPlanCategoryOption,
   BatchMealDemandRow,
 } from "@/orders/admin-types.ts";
+import { isMembershipBatchEligible } from "@/orders/admin-types.ts";
+import { toIsoDateString } from "@/lib/dates.ts";
 
 import { listAdminBatches, listAdminOrders } from "./batches.server.ts";
 import { getDb } from "./index.server.ts";
@@ -93,6 +96,62 @@ function mergePlanTags(
     kept.push(`${MEALS_TAG_PREFIX}${Math.floor(mealsPerWeek)}`);
   }
   return kept;
+}
+
+type Db = ReturnType<typeof getDb>;
+
+async function assertValidPlanSlug(db: Db, planSlug: string | null | undefined): Promise<void> {
+  const slug = planSlug?.trim();
+  if (!slug) return;
+
+  const [category] = await db
+    .select({ slug: planCategories.slug })
+    .from(planCategories)
+    .where(and(eq(planCategories.slug, slug), eq(planCategories.active, true)))
+    .limit(1);
+
+  if (!category) {
+    throw new Error(`Plan "${slug}" is not an active plan category.`);
+  }
+}
+
+async function assertNoBlockingMembership(
+  db: Db,
+  userId: string,
+  excludeMembershipId?: string,
+): Promise<void> {
+  const rows = await db
+    .select({ id: memberships.id })
+    .from(memberships)
+    .where(and(eq(memberships.userId, userId), inArray(memberships.status, ["active", "paused"])));
+
+  const blocking = rows.filter((row) => row.id !== excludeMembershipId);
+  if (blocking.length > 0) {
+    throw new Error(
+      "Customer already has an active or paused membership. Cancel or resume the existing one first.",
+    );
+  }
+}
+
+function assertPauseDateNotInPast(isoDate: string): void {
+  const normalized = toIsoDateString(isoDate);
+  if (!normalized) {
+    throw new Error("Invalid pause date format. Use YYYY-MM-DD.");
+  }
+
+  const today = toIsoDateString(new Date());
+  if (today && normalized < today) {
+    throw new Error("Pause until date must be today or later.");
+  }
+}
+
+function parsePausedUntilDate(isoDate: string): Date {
+  const normalized = toIsoDateString(isoDate);
+  if (!normalized) {
+    throw new Error("Invalid pause date format. Use YYYY-MM-DD.");
+  }
+
+  return parseISO(`${normalized}T12:00:00`);
 }
 
 /** All customer-role users with profile and order counts (membership joined separately). */
@@ -209,7 +268,7 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
   });
 }
 
-/** Active or paused memberships for the memberships admin view. */
+/** All memberships for the admin memberships view. */
 export async function listAdminMemberships(): Promise<AdminMembershipRow[]> {
   const db = getDb();
 
@@ -220,6 +279,7 @@ export async function listAdminMemberships(): Promise<AdminMembershipRow[]> {
       email: users.email,
       name: users.name,
       membershipStatus: memberships.status,
+      pausedUntil: memberships.pausedUntil,
       paymentSchedule: memberships.paymentSchedule,
       portionDefault: memberships.portionDefault,
       planSlug: memberships.planSlug,
@@ -252,12 +312,15 @@ export async function listAdminMemberships(): Promise<AdminMembershipRow[]> {
 
   return rows.map((row) => {
     const planSlug = row.planSlug ?? parsePlanSlugFromTags(row.dietaryTags);
+    const pausedUntil = toIsoDateString(row.pausedUntil);
     return {
       membershipId: row.membershipId,
       userId: row.userId,
       email: row.email,
       name: row.name,
       membershipStatus: row.membershipStatus,
+      pausedUntil,
+      batchEligible: isMembershipBatchEligible(row.membershipStatus),
       paymentSchedule: row.paymentSchedule,
       portionDefault: row.portionDefault,
       planSlug,
@@ -476,6 +539,10 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
       .orderBy(desc(memberships.updatedAt))
       .limit(1);
 
+    if (input.membershipStatus === "active" || input.membershipStatus === "paused") {
+      await assertNoBlockingMembership(db, input.userId, membership?.id);
+    }
+
     if (membership) {
       await db
         .update(memberships)
@@ -520,6 +587,9 @@ export async function createAdminMembership(input: CreateAdminMembershipInput): 
     throw new Error("Customer not found.");
   }
 
+  await assertNoBlockingMembership(db, input.userId);
+  await assertValidPlanSlug(db, input.planSlug?.trim() || null);
+
   const billingProfile = input.billingProfile ?? "catalog";
   if (
     billingProfile === "fixed_price" &&
@@ -550,6 +620,7 @@ export async function createAdminMembership(input: CreateAdminMembershipInput): 
 export type UpdateAdminMembershipInput = {
   membershipId: string;
   membershipStatus?: MembershipStatus;
+  pausedUntil?: string | null;
   planSlug?: string | null;
   mealsPerWeek?: number | null;
   portionDefault?: PortionDefault;
@@ -566,6 +637,9 @@ export async function updateAdminMembership(input: UpdateAdminMembershipInput): 
   const [membership] = await db
     .select({
       id: memberships.id,
+      userId: memberships.userId,
+      status: memberships.status,
+      planSlug: memberships.planSlug,
       billingProfile: memberships.billingProfile,
       fixedPricePerMealCents: memberships.fixedPricePerMealCents,
     })
@@ -590,8 +664,25 @@ export async function updateAdminMembership(input: UpdateAdminMembershipInput): 
     throw new Error("Fixed price per meal is required for fixed price billing.");
   }
 
+  const nextStatus = input.membershipStatus ?? membership.status;
+
+  if (nextStatus === "active" && input.pausedUntil != null) {
+    throw new Error("Active memberships cannot have a pause until date.");
+  }
+
+  if (nextStatus === "active" || nextStatus === "paused") {
+    await assertNoBlockingMembership(db, membership.userId, membership.id);
+  }
+
+  if (input.planSlug !== undefined) {
+    await assertValidPlanSlug(db, input.planSlug?.trim() || null);
+  } else if (nextStatus === "active" || nextStatus === "paused") {
+    await assertValidPlanSlug(db, membership.planSlug);
+  }
+
   const updates: {
     status?: MembershipStatus;
+    pausedUntil?: Date | null;
     planSlug?: string | null;
     mealsPerWeek?: number | null;
     portionDefault?: PortionDefault;
@@ -608,6 +699,21 @@ export async function updateAdminMembership(input: UpdateAdminMembershipInput): 
   if (input.paymentSchedule !== undefined) updates.paymentSchedule = input.paymentSchedule;
   if (input.billingProfile !== undefined) updates.billingProfile = input.billingProfile;
   if (input.discountCents !== undefined) updates.discountCents = input.discountCents;
+
+  if (nextStatus === "active" || nextStatus === "cancelled") {
+    updates.pausedUntil = null;
+  } else if (nextStatus === "paused") {
+    if (input.pausedUntil !== undefined) {
+      if (input.pausedUntil === null) {
+        updates.pausedUntil = null;
+      } else {
+        assertPauseDateNotInPast(input.pausedUntil);
+        updates.pausedUntil = parsePausedUntilDate(input.pausedUntil);
+      }
+    } else if (input.membershipStatus === "paused" && membership.status !== "paused") {
+      updates.pausedUntil = null;
+    }
+  }
 
   if (nextBillingProfile === "catalog") {
     updates.fixedPricePerMealCents = null;

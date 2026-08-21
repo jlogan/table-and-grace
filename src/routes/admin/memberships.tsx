@@ -28,9 +28,11 @@ import type { PaymentSchedule } from "@/db/schema/payment-schedules";
 import type { AdminMembershipRow } from "@/orders/admin-types";
 import {
   formatBillingProfile,
+  formatBatchEligibility,
   formatMembershipStatus,
   membershipStatusBadgeVariant,
 } from "@/orders/admin-types";
+import { formatDateString } from "@/lib/dates";
 import {
   createAdminMembershipRecord,
   fetchAdminCustomers,
@@ -65,6 +67,7 @@ type MembershipFormData = {
   fixedPricePerMealCents?: number;
   discountCents?: number;
   membershipStatus?: MembershipStatus;
+  pausedUntil?: string | null;
 };
 
 function AdminMembershipsPage() {
@@ -76,6 +79,8 @@ function AdminMembershipsPage() {
   const [memberships, setMemberships] = useState(initialMemberships);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingMembership, setEditingMembership] = useState<AdminMembershipRow | null>(null);
+  const [pausingMembershipId, setPausingMembershipId] = useState<string | null>(null);
+  const [pauseUntilDate, setPauseUntilDate] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,14 +99,57 @@ function AdminMembershipsPage() {
     setError(null);
     setMessage(null);
     try {
-      await updateFn({ data: { membershipId, membershipStatus: "cancelled" } });
+      await updateFn({
+        data: { membershipId, membershipStatus: "cancelled", pausedUntil: null },
+      });
       setMessage("Membership cancelled.");
+      if (editingMembership?.membershipId === membershipId) {
+        setEditingMembership(null);
+      }
+      if (pausingMembershipId === membershipId) {
+        setPausingMembershipId(null);
+        setPauseUntilDate("");
+      }
+      await refreshMemberships();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not cancel membership.");
+    }
+  }
+
+  async function resumeMembership(membershipId: string) {
+    setError(null);
+    setMessage(null);
+    try {
+      await updateFn({
+        data: { membershipId, membershipStatus: "active", pausedUntil: null },
+      });
+      setMessage("Membership resumed.");
       if (editingMembership?.membershipId === membershipId) {
         setEditingMembership(null);
       }
       await refreshMemberships();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not cancel membership.");
+      setError(e instanceof Error ? e.message : "Could not resume membership.");
+    }
+  }
+
+  async function pauseMembership(membershipId: string) {
+    setError(null);
+    setMessage(null);
+    try {
+      await updateFn({
+        data: {
+          membershipId,
+          membershipStatus: "paused",
+          pausedUntil: pauseUntilDate.trim() || null,
+        },
+      });
+      setMessage("Membership paused.");
+      setPausingMembershipId(null);
+      setPauseUntilDate("");
+      await refreshMemberships();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not pause membership.");
     }
   }
 
@@ -116,8 +164,8 @@ function AdminMembershipsPage() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-foreground">Memberships</h2>
           <p className="text-sm text-muted-foreground">
-            Assign plan and billing preferences per membership. A customer can have more than one
-            active membership.
+            Assign plan and billing preferences per membership. Each customer may have one active or
+            paused membership at a time; cancelled memberships remain in history.
           </p>
         </div>
         {!showAddForm && !editingMembership ? (
@@ -207,6 +255,13 @@ function AdminMembershipsPage() {
                     data: {
                       membershipId: editingMembership.membershipId,
                       membershipStatus: data.membershipStatus,
+                      pausedUntil:
+                        data.membershipStatus === "paused"
+                          ? (data.pausedUntil ?? null)
+                          : data.membershipStatus === "active" ||
+                              data.membershipStatus === "cancelled"
+                            ? null
+                            : undefined,
                       planSlug: data.planSlug || null,
                       mealsPerWeek: data.mealsPerWeek ?? null,
                       paymentSchedule: data.paymentSchedule,
@@ -248,13 +303,15 @@ function AdminMembershipsPage() {
                 <TableHead>Portion</TableHead>
                 <TableHead>Invoice frequency</TableHead>
                 <TableHead>Billing</TableHead>
-                <TableHead className="w-[200px]" />
+                <TableHead>Batch eligibility</TableHead>
+                <TableHead>Paused until</TableHead>
+                <TableHead className="w-[240px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {memberships.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground">
+                  <TableCell colSpan={9} className="text-muted-foreground">
                     No memberships yet — add a membership for an existing customer to start the
                     pilot.
                   </TableCell>
@@ -263,6 +320,8 @@ function AdminMembershipsPage() {
                 memberships.map((member) => {
                   const label = member.name?.trim() || member.email;
                   const isEditing = editingMembership?.membershipId === member.membershipId;
+                  const pausePeriodEnded =
+                    member.membershipStatus === "paused" && isPastPauseDate(member.pausedUntil);
                   return (
                     <TableRow
                       key={member.membershipId}
@@ -276,7 +335,7 @@ function AdminMembershipsPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant={membershipStatusBadgeVariant(member.membershipStatus)}>
-                          {formatMembershipStatus(member.membershipStatus)}
+                          {formatMembershipStatus(member.membershipStatus, member.pausedUntil)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">
@@ -304,55 +363,100 @@ function AdminMembershipsPage() {
                         ) : null}
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setShowAddForm(false);
-                              setEditingMembership(member);
-                              setError(null);
-                              setMessage(null);
-                            }}
-                          >
-                            Edit
-                          </Button>
-                          {member.membershipStatus === "paused" ? (
+                        <Badge variant={member.batchEligible ? "default" : "secondary"}>
+                          {formatBatchEligibility(member.batchEligible)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {member.membershipStatus === "paused" ? (
+                          <>
+                            {member.pausedUntil
+                              ? formatDateString(member.pausedUntil, "MMM d, yyyy")
+                              : "Indefinite"}
+                            {pausePeriodEnded ? (
+                              <div className="text-xs text-destructive">
+                                Pause period ended — resume required
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex flex-wrap gap-1">
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={async () => {
+                              onClick={() => {
+                                setShowAddForm(false);
+                                setPausingMembershipId(null);
+                                setPauseUntilDate("");
+                                setEditingMembership(member);
                                 setError(null);
                                 setMessage(null);
-                                try {
-                                  await updateFn({
-                                    data: {
-                                      membershipId: member.membershipId,
-                                      membershipStatus: "active",
-                                    },
-                                  });
-                                  setMessage("Membership activated.");
-                                  await refreshMemberships();
-                                } catch (e) {
-                                  setError(
-                                    e instanceof Error
-                                      ? e.message
-                                      : "Could not activate membership.",
-                                  );
-                                }
                               }}
                             >
-                              Activate
+                              Edit
                             </Button>
-                          ) : null}
-                          {member.membershipStatus !== "cancelled" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => cancelMembership(member.membershipId)}
-                            >
-                              Cancel
-                            </Button>
+                            {member.membershipStatus === "paused" ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => resumeMembership(member.membershipId)}
+                              >
+                                Resume
+                              </Button>
+                            ) : null}
+                            {member.membershipStatus === "active" ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setPausingMembershipId(
+                                    pausingMembershipId === member.membershipId
+                                      ? null
+                                      : member.membershipId,
+                                  );
+                                  setPauseUntilDate("");
+                                  setError(null);
+                                  setMessage(null);
+                                }}
+                              >
+                                {pausingMembershipId === member.membershipId ? "Close" : "Pause"}
+                              </Button>
+                            ) : null}
+                            {member.membershipStatus !== "cancelled" ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => cancelMembership(member.membershipId)}
+                              >
+                                Cancel
+                              </Button>
+                            ) : null}
+                          </div>
+                          {pausingMembershipId === member.membershipId ? (
+                            <div className="flex flex-wrap items-end gap-2">
+                              <div className="space-y-1">
+                                <Label htmlFor={`pause-until-${member.membershipId}`}>
+                                  Pause until (optional)
+                                </Label>
+                                <Input
+                                  id={`pause-until-${member.membershipId}`}
+                                  type="date"
+                                  value={pauseUntilDate}
+                                  onChange={(e) => setPauseUntilDate(e.target.value)}
+                                />
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => pauseMembership(member.membershipId)}
+                              >
+                                Confirm pause
+                              </Button>
+                            </div>
                           ) : null}
                         </div>
                       </TableCell>
@@ -379,6 +483,11 @@ function parseDollarInput(value: string): number | undefined {
 function centsToDollarInput(cents: number | null | undefined): string {
   if (cents == null) return "";
   return (cents / 100).toFixed(2);
+}
+
+function isPastPauseDate(pausedUntil: string | null): boolean {
+  if (!pausedUntil) return false;
+  return pausedUntil < new Date().toISOString().slice(0, 10);
 }
 
 function MembershipForm({
@@ -423,6 +532,7 @@ function MembershipForm({
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus>(
     membership?.membershipStatus ?? "active",
   );
+  const [pausedUntil, setPausedUntil] = useState(membership?.pausedUntil ?? "");
   const [saving, setSaving] = useState(false);
 
   const fixedPriceCents = parseDollarInput(fixedPricePerMeal);
@@ -448,6 +558,13 @@ function MembershipForm({
             fixedPricePerMealCents: billingProfile === "fixed_price" ? fixedPriceCents : undefined,
             discountCents: billingProfile === "fixed_price" ? discountCents : undefined,
             membershipStatus: mode === "edit" ? membershipStatus : undefined,
+            pausedUntil:
+              mode === "edit" && membershipStatus === "paused"
+                ? pausedUntil.trim() || null
+                : mode === "edit" &&
+                    (membershipStatus === "active" || membershipStatus === "cancelled")
+                  ? null
+                  : undefined,
           });
         } finally {
           setSaving(false);
@@ -590,22 +707,44 @@ function MembershipForm({
         </>
       ) : null}
       {mode === "edit" ? (
-        <div className="space-y-2">
-          <Label htmlFor="membership-status">Status</Label>
-          <Select
-            value={membershipStatus}
-            onValueChange={(v) => setMembershipStatus(v as MembershipStatus)}
-          >
-            <SelectTrigger id="membership-status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="paused">Paused</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="membership-status">Status</Label>
+            <Select
+              value={membershipStatus}
+              onValueChange={(v) => {
+                const next = v as MembershipStatus;
+                setMembershipStatus(next);
+                if (next === "active" || next === "cancelled") {
+                  setPausedUntil("");
+                }
+              }}
+            >
+              <SelectTrigger id="membership-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="paused">Paused</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {membershipStatus === "paused" ? (
+            <div className="space-y-2">
+              <Label htmlFor="membership-paused-until">Paused until (optional)</Label>
+              <Input
+                id="membership-paused-until"
+                type="date"
+                value={pausedUntil}
+                onChange={(e) => setPausedUntil(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank for an indefinite pause. Past dates are not allowed.
+              </p>
+            </div>
+          ) : null}
+        </>
       ) : null}
       <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
         <Button

@@ -4,6 +4,7 @@ import type { PaymentSchedule } from "@/db/schema/payment-schedules.ts";
 import type { UserRole } from "@/db/schema/users.ts";
 import type { BatchStatus } from "@/db/schema/weekly-batches.ts";
 import type { OrderStatus } from "@/db/schema/weekly-orders.ts";
+import { formatDateString } from "@/lib/dates.ts";
 
 export type AdminBatchSummary = {
   id: string;
@@ -125,6 +126,8 @@ export type AdminMembershipRow = {
   email: string;
   name: string | null;
   membershipStatus: MembershipStatus;
+  pausedUntil: string | null;
+  batchEligible: boolean;
   paymentSchedule: PaymentSchedule;
   portionDefault: PortionDefault;
   planSlug: string | null;
@@ -134,6 +137,14 @@ export type AdminMembershipRow = {
   fixedPricePerMealCents: number | null;
   discountCents: number;
 };
+
+export function isMembershipBatchEligible(status: MembershipStatus): boolean {
+  return status === "active";
+}
+
+export function formatBatchEligibility(eligible: boolean): string {
+  return eligible ? "Eligible" : "Not eligible";
+}
 
 export function formatBillingProfile(profile: BillingProfile): string {
   return profile === "fixed_price" ? "Fixed price" : "Catalog";
@@ -166,12 +177,19 @@ export function membershipStatusBadgeVariant(
   return "secondary";
 }
 
-export function formatMembershipStatus(status: MembershipStatus | null): string {
+export function formatMembershipStatus(
+  status: MembershipStatus | null,
+  pausedUntil?: string | null,
+): string {
   if (!status) return "No membership";
   const labels: Record<MembershipStatus, string> = {
     active: "Active",
     paused: "Paused",
     cancelled: "Cancelled",
   };
-  return labels[status] ?? status;
+  const base = labels[status] ?? status;
+  if (status === "paused" && pausedUntil) {
+    return `${base} until ${formatDateString(pausedUntil, "MMM d, yyyy")}`;
+  }
+  return base;
 }
