@@ -136,6 +136,10 @@ export type AdminMembershipRow = {
   billingProfile: BillingProfile;
   fixedPricePerMealCents: number | null;
   discountCents: number;
+  discountLabel: string | null;
+  weeklyInvoiceDay: number | null;
+  monthlyInvoiceDay: number | null;
+  biweeklyAnchorDate: string | null;
 };
 
 export function isMembershipBatchEligible(status: MembershipStatus): boolean {

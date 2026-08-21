@@ -275,6 +275,10 @@ export async function listAdminMemberships(): Promise<AdminMembershipRow[]> {
       billingProfile: memberships.billingProfile,
       fixedPricePerMealCents: memberships.fixedPricePerMealCents,
       discountCents: memberships.discountCents,
+      discountLabel: memberships.discountLabel,
+      weeklyInvoiceDay: memberships.weeklyInvoiceDay,
+      monthlyInvoiceDay: memberships.monthlyInvoiceDay,
+      biweeklyAnchorDate: memberships.biweeklyAnchorDate,
       dietaryTags: customerProfiles.dietaryTags,
     })
     .from(memberships)
@@ -317,6 +321,10 @@ export async function listAdminMemberships(): Promise<AdminMembershipRow[]> {
       billingProfile: row.billingProfile,
       fixedPricePerMealCents: row.fixedPricePerMealCents,
       discountCents: row.discountCents,
+      discountLabel: row.discountLabel,
+      weeklyInvoiceDay: row.weeklyInvoiceDay,
+      monthlyInvoiceDay: row.monthlyInvoiceDay,
+      biweeklyAnchorDate: toIsoDateString(row.biweeklyAnchorDate),
     };
   });
 }
@@ -555,6 +563,10 @@ export type CreateAdminMembershipInput = {
   billingProfile?: BillingProfile;
   fixedPricePerMealCents?: number;
   discountCents?: number;
+  discountLabel?: string;
+  weeklyInvoiceDay?: number;
+  monthlyInvoiceDay?: number;
+  biweeklyAnchorDate?: string;
 };
 
 /** Create a new membership for an existing customer (supports multiple per customer). */
@@ -595,6 +607,14 @@ export async function createAdminMembership(input: CreateAdminMembershipInput): 
     fixedPricePerMealCents:
       billingProfile === "fixed_price" ? (input.fixedPricePerMealCents ?? null) : null,
     discountCents: input.discountCents ?? 0,
+    discountLabel: input.discountLabel?.trim() || null,
+    weeklyInvoiceDay:
+      input.paymentSchedule === "weekly_autopay" ? (input.weeklyInvoiceDay ?? null) : null,
+    monthlyInvoiceDay:
+      input.paymentSchedule === "monthly_autopay" ? (input.monthlyInvoiceDay ?? null) : null,
+    biweeklyAnchorDate: input.biweeklyAnchorDate
+      ? parseISO(`${input.biweeklyAnchorDate}T12:00:00`)
+      : null,
   });
 
   return membershipId;
@@ -611,6 +631,10 @@ export type UpdateAdminMembershipInput = {
   billingProfile?: BillingProfile;
   fixedPricePerMealCents?: number | null;
   discountCents?: number;
+  discountLabel?: string | null;
+  weeklyInvoiceDay?: number | null;
+  monthlyInvoiceDay?: number | null;
+  biweeklyAnchorDate?: string | null;
 };
 
 /** Update membership plan, billing, and status by membership id. */
@@ -669,6 +693,10 @@ export async function updateAdminMembership(input: UpdateAdminMembershipInput): 
     billingProfile?: BillingProfile;
     fixedPricePerMealCents?: number | null;
     discountCents?: number;
+    discountLabel?: string | null;
+    weeklyInvoiceDay?: number | null;
+    monthlyInvoiceDay?: number | null;
+    biweeklyAnchorDate?: Date | null;
   } = {};
 
   if (input.membershipStatus !== undefined) updates.status = input.membershipStatus;
@@ -678,6 +706,15 @@ export async function updateAdminMembership(input: UpdateAdminMembershipInput): 
   if (input.paymentSchedule !== undefined) updates.paymentSchedule = input.paymentSchedule;
   if (input.billingProfile !== undefined) updates.billingProfile = input.billingProfile;
   if (input.discountCents !== undefined) updates.discountCents = input.discountCents;
+  if (input.discountLabel !== undefined)
+    updates.discountLabel = input.discountLabel?.trim() || null;
+  if (input.weeklyInvoiceDay !== undefined) updates.weeklyInvoiceDay = input.weeklyInvoiceDay;
+  if (input.monthlyInvoiceDay !== undefined) updates.monthlyInvoiceDay = input.monthlyInvoiceDay;
+  if (input.biweeklyAnchorDate !== undefined) {
+    updates.biweeklyAnchorDate = input.biweeklyAnchorDate
+      ? parseISO(`${input.biweeklyAnchorDate}T12:00:00`)
+      : null;
+  }
 
   if (nextStatus === "active" || nextStatus === "cancelled") {
     updates.pausedUntil = null;

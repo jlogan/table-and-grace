@@ -28,6 +28,14 @@ export const memberships = mysqlTable("memberships", {
   fixedPricePerMealCents: int("fixed_price_per_meal_cents"),
   /** Flat discount applied to membership billing (cents). */
   discountCents: int("discount_cents").notNull().default(0),
+  /** Admin-facing label for the fixed-price discount, e.g. Senior dinner promo. */
+  discountLabel: varchar("discount_label", { length: 120 }),
+  /** Weekly invoice day, 0=Sunday through 6=Saturday. */
+  weeklyInvoiceDay: int("weekly_invoice_day"),
+  /** Monthly invoice day of month, 1-28 for predictable recurring billing. */
+  monthlyInvoiceDay: int("monthly_invoice_day"),
+  /** Future biweekly/manual anchor date for billing schedule planning. */
+  biweeklyAnchorDate: timestamp("biweekly_anchor_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });

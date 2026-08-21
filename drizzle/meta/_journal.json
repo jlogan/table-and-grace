@@ -36,6 +36,13 @@
       "when": 1787083000000,
       "tag": "0004_membership_details",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1787334379316,
+      "tag": "0005_clean_beast",
+      "breakpoints": true
     }
   ]
 }

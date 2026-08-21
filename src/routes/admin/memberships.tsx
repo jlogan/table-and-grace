@@ -66,6 +66,10 @@ type MembershipFormData = {
   billingProfile: BillingProfile;
   fixedPricePerMealCents?: number;
   discountCents?: number;
+  discountLabel?: string | null;
+  weeklyInvoiceDay?: number | null;
+  monthlyInvoiceDay?: number | null;
+  biweeklyAnchorDate?: string | null;
   membershipStatus?: MembershipStatus;
   pausedUntil?: string | null;
 };
@@ -219,6 +223,10 @@ function AdminMembershipsPage() {
                       billingProfile: data.billingProfile,
                       fixedPricePerMealCents: data.fixedPricePerMealCents,
                       discountCents: data.discountCents,
+                      discountLabel: data.discountLabel ?? undefined,
+                      weeklyInvoiceDay: data.weeklyInvoiceDay ?? undefined,
+                      monthlyInvoiceDay: data.monthlyInvoiceDay ?? undefined,
+                      biweeklyAnchorDate: data.biweeklyAnchorDate ?? undefined,
                     },
                   });
                   closeForms();
@@ -270,6 +278,10 @@ function AdminMembershipsPage() {
                       billingProfile: data.billingProfile,
                       fixedPricePerMealCents: data.fixedPricePerMealCents ?? null,
                       discountCents: data.discountCents,
+                      discountLabel: data.discountLabel ?? null,
+                      weeklyInvoiceDay: data.weeklyInvoiceDay ?? null,
+                      monthlyInvoiceDay: data.monthlyInvoiceDay ?? null,
+                      biweeklyAnchorDate: data.biweeklyAnchorDate ?? null,
                     },
                   });
                   closeForms();
@@ -320,6 +332,7 @@ function AdminMembershipsPage() {
               ) : (
                 memberships.map((member) => {
                   const label = member.name?.trim() || member.email;
+                  const invoiceTiming = formatInvoiceTiming(member);
                   const isEditing = editingMembership?.membershipId === member.membershipId;
                   const pausePeriodEnded =
                     member.membershipStatus === "paused" && isPastPauseDate(member.pausedUntil);
@@ -350,6 +363,9 @@ function AdminMembershipsPage() {
                       <TableCell className="text-sm">{member.portionDefault}</TableCell>
                       <TableCell className="text-sm">
                         {formatPaymentSchedule(member.paymentSchedule)}
+                        {invoiceTiming ? (
+                          <div className="text-xs text-muted-foreground">{invoiceTiming}</div>
+                        ) : null}
                       </TableCell>
                       <TableCell className="text-sm">
                         {formatBillingProfile(member.billingProfile)}
@@ -358,7 +374,7 @@ function AdminMembershipsPage() {
                           <div className="text-xs text-muted-foreground">
                             {centsToLabel(member.fixedPricePerMealCents)}/meal
                             {member.discountCents > 0
-                              ? ` · ${centsToLabel(member.discountCents)} off`
+                              ? ` · ${centsToLabel(member.discountCents)} off${member.discountLabel ? ` (${member.discountLabel})` : ""}`
                               : ""}
                           </div>
                         ) : null}
@@ -491,6 +507,29 @@ function isPastPauseDate(pausedUntil: string | null): boolean {
   return pausedUntil < new Date().toISOString().slice(0, 10);
 }
 
+const invoiceDayLabels = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+function formatInvoiceTiming(member: AdminMembershipRow): string | null {
+  if (member.paymentSchedule === "weekly_autopay" && member.weeklyInvoiceDay != null) {
+    return `Invoices every ${invoiceDayLabels[member.weeklyInvoiceDay] ?? "selected day"}`;
+  }
+  if (member.paymentSchedule === "monthly_autopay" && member.monthlyInvoiceDay != null) {
+    return `Invoices on day ${member.monthlyInvoiceDay}`;
+  }
+  if (member.biweeklyAnchorDate) {
+    return `Anchor ${formatDateString(member.biweeklyAnchorDate, "MMM d, yyyy")}`;
+  }
+  return null;
+}
+
 function MembershipForm({
   mode,
   customers,
@@ -530,6 +569,16 @@ function MembershipForm({
   const [discountAmount, setDiscountAmount] = useState(
     centsToDollarInput(membership?.discountCents ?? 0),
   );
+  const [discountLabel, setDiscountLabel] = useState(membership?.discountLabel ?? "");
+  const [weeklyInvoiceDay, setWeeklyInvoiceDay] = useState(
+    membership?.weeklyInvoiceDay != null ? String(membership.weeklyInvoiceDay) : "",
+  );
+  const [monthlyInvoiceDay, setMonthlyInvoiceDay] = useState(
+    membership?.monthlyInvoiceDay != null ? String(membership.monthlyInvoiceDay) : "",
+  );
+  const [biweeklyAnchorDate, setBiweeklyAnchorDate] = useState(
+    membership?.biweeklyAnchorDate ?? "",
+  );
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus>(
     membership?.membershipStatus ?? "active",
   );
@@ -538,6 +587,8 @@ function MembershipForm({
 
   const fixedPriceCents = parseDollarInput(fixedPricePerMeal);
   const discountCents = parseDollarInput(discountAmount) ?? 0;
+  const parsedWeeklyInvoiceDay = weeklyInvoiceDay ? Number(weeklyInvoiceDay) : null;
+  const parsedMonthlyInvoiceDay = monthlyInvoiceDay ? Number(monthlyInvoiceDay) : null;
   const fixedPriceRequired =
     billingProfile === "fixed_price" && (fixedPriceCents == null || fixedPriceCents <= 0);
 
@@ -558,6 +609,14 @@ function MembershipForm({
             billingProfile,
             fixedPricePerMealCents: billingProfile === "fixed_price" ? fixedPriceCents : undefined,
             discountCents: billingProfile === "fixed_price" ? discountCents : undefined,
+            discountLabel:
+              billingProfile === "fixed_price" && discountCents > 0
+                ? discountLabel.trim() || null
+                : null,
+            weeklyInvoiceDay: paymentSchedule === "weekly_autopay" ? parsedWeeklyInvoiceDay : null,
+            monthlyInvoiceDay:
+              paymentSchedule === "monthly_autopay" ? parsedMonthlyInvoiceDay : null,
+            biweeklyAnchorDate: biweeklyAnchorDate.trim() || null,
             membershipStatus: mode === "edit" ? membershipStatus : undefined,
             pausedUntil:
               mode === "edit" && membershipStatus === "paused"
@@ -651,7 +710,12 @@ function MembershipForm({
         <Label htmlFor="membership-payment">Invoice Frequency</Label>
         <Select
           value={paymentSchedule}
-          onValueChange={(v) => setPaymentSchedule(v as PaymentSchedule)}
+          onValueChange={(v) => {
+            const next = v as PaymentSchedule;
+            setPaymentSchedule(next);
+            if (next !== "weekly_autopay") setWeeklyInvoiceDay("");
+            if (next !== "monthly_autopay") setMonthlyInvoiceDay("");
+          }}
         >
           <SelectTrigger id="membership-payment">
             <SelectValue />
@@ -662,6 +726,56 @@ function MembershipForm({
             <SelectItem value="manual_per_order">Manual</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+      {paymentSchedule === "weekly_autopay" ? (
+        <div className="space-y-2">
+          <Label htmlFor="membership-weekly-day">Weekly invoice day</Label>
+          <Select
+            value={weeklyInvoiceDay || "none"}
+            onValueChange={(v) => setWeeklyInvoiceDay(v === "none" ? "" : v)}
+          >
+            <SelectTrigger id="membership-weekly-day">
+              <SelectValue placeholder="Select day" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Use default batch timing</SelectItem>
+              {invoiceDayLabels.map((day, index) => (
+                <SelectItem key={day} value={String(index)}>
+                  {day}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+      {paymentSchedule === "monthly_autopay" ? (
+        <div className="space-y-2">
+          <Label htmlFor="membership-monthly-day">Monthly invoice day</Label>
+          <Input
+            id="membership-monthly-day"
+            type="number"
+            min={1}
+            max={28}
+            value={monthlyInvoiceDay}
+            onChange={(e) => setMonthlyInvoiceDay(e.target.value)}
+            placeholder="1-28"
+          />
+          <p className="text-xs text-muted-foreground">
+            Limited to days 1–28 so every month is valid.
+          </p>
+        </div>
+      ) : null}
+      <div className="space-y-2">
+        <Label htmlFor="membership-billing-anchor">Billing anchor date</Label>
+        <Input
+          id="membership-billing-anchor"
+          type="date"
+          value={biweeklyAnchorDate}
+          onChange={(e) => setBiweeklyAnchorDate(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          Optional planning anchor for manual/biweekly follow-up billing.
+        </p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="membership-billing-profile">Billing Profile</Label>
@@ -703,6 +817,16 @@ function MembershipForm({
               value={discountAmount}
               onChange={(e) => setDiscountAmount(e.target.value)}
               placeholder="0.00"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="membership-discount-label">Discount title</Label>
+            <Input
+              id="membership-discount-label"
+              value={discountLabel}
+              onChange={(e) => setDiscountLabel(e.target.value)}
+              placeholder="Senior dinner discount"
+              maxLength={120}
             />
           </div>
         </>

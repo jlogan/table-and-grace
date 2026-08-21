@@ -186,6 +186,13 @@ const createMembershipSchema = z.object({
   billingProfile: z.enum(billingProfiles).optional(),
   fixedPricePerMealCents: z.number().int().min(0).max(999999).optional(),
   discountCents: z.number().int().min(0).max(999999).optional(),
+  discountLabel: z.string().trim().max(120).optional(),
+  weeklyInvoiceDay: z.number().int().min(0).max(6).optional(),
+  monthlyInvoiceDay: z.number().int().min(1).max(28).optional(),
+  biweeklyAnchorDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 export const createAdminMembershipRecord = createServerFn({ method: "POST" })
@@ -211,6 +218,14 @@ const updateMembershipSchema = z.object({
   billingProfile: z.enum(billingProfiles).optional(),
   fixedPricePerMealCents: z.number().int().min(0).max(999999).nullable().optional(),
   discountCents: z.number().int().min(0).max(999999).optional(),
+  discountLabel: z.string().trim().max(120).nullable().optional(),
+  weeklyInvoiceDay: z.number().int().min(0).max(6).nullable().optional(),
+  monthlyInvoiceDay: z.number().int().min(1).max(28).nullable().optional(),
+  biweeklyAnchorDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
 });
 
 export const updateAdminMembershipRecord = createServerFn({ method: "POST" })
