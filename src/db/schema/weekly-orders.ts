@@ -72,7 +72,7 @@ export const weeklyOrders = mysqlTable(
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
   },
   (table) => [
-    uniqueIndex("weekly_orders_batch_user_idx").on(table.batchId, table.userId),
+    uniqueIndex("weekly_orders_batch_membership_idx").on(table.batchId, table.membershipId),
     index("weekly_orders_membership_id_idx").on(table.membershipId),
   ],
 );
