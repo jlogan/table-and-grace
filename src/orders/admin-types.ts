@@ -5,6 +5,7 @@ import type { UserRole } from "@/db/schema/users.ts";
 import type { BatchStatus } from "@/db/schema/weekly-batches.ts";
 import type { OrderStatus } from "@/db/schema/weekly-orders.ts";
 import { formatDateString } from "@/lib/dates.ts";
+import type { DietaryPreferenceSlug, FoodAllergenSlug } from "@/lib/food-profile.ts";
 
 export type AdminBatchSummary = {
   id: string;
@@ -165,8 +166,14 @@ export type AdminCustomerDetail = {
   hasProfilePhoto: boolean;
   /** Admin-only display URL when a photo exists; never edited via raw URL field in UI. */
   profilePhotoUrl: string | null;
+  /** Legacy free-text allergy record; shown in Previous food information only. */
   allergies: string | null;
+  /** Legacy visible dietary tags (plan:/meals: filtered); Previous food information only. */
   dietaryTags: string[];
+  dietaryPreferences: DietaryPreferenceSlug[];
+  dietaryPreferenceOther: string | null;
+  foodAllergens: FoodAllergenSlug[];
+  foodAllergenOther: string | null;
   portionDefault: PortionDefault;
   chefNotes: string | null;
   memberships: AdminCustomerMembershipSummary[];

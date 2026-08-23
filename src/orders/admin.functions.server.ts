@@ -33,6 +33,7 @@ import {
 import { billingProfiles, membershipStatuses } from "@/db/schema/memberships";
 import { portionDefaults } from "@/db/schema/customer-profiles";
 import { paymentSchedules } from "@/db/schema/payment-schedules";
+import { dietaryPreferenceSlugs, foodAllergenSlugs } from "@/lib/food-profile";
 
 const batchIdSchema = z.object({
   batchId: z.string().uuid(),
@@ -146,6 +147,16 @@ const dietaryTagsSchema = z
     message: 'Dietary tags cannot use reserved "plan:" or "meals:" prefixes.',
   });
 
+const dietaryPreferencesSchema = z
+  .array(z.enum(dietaryPreferenceSlugs))
+  .max(dietaryPreferenceSlugs.length)
+  .optional();
+
+const foodAllergensSchema = z
+  .array(z.enum(foodAllergenSlugs))
+  .max(foodAllergenSlugs.length)
+  .optional();
+
 const createCustomerSchema = z.object({
   email: z.string().trim().email().max(255),
   firstName: z.string().trim().min(1).max(127),
@@ -177,30 +188,60 @@ export const createAdminCustomerAccount = createServerFn({ method: "POST" })
     return { userId };
   });
 
-const updateCustomerSchema = z.object({
-  userId: z.string().uuid(),
-  email: z.string().trim().email().max(255).optional(),
-  firstName: z.string().trim().max(127).optional(),
-  lastName: z.string().trim().max(127).optional(),
-  preferredName: z.string().trim().max(127).nullable().optional(),
-  name: z.string().trim().max(255).optional(),
-  phone: z.string().trim().max(32).nullable().optional(),
-  birthday: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable()
-    .optional(),
-  favoriteCake: z.string().trim().max(255).nullable().optional(),
-  allergies: z.string().trim().max(2000).nullable().optional(),
-  dietaryTags: dietaryTagsSchema.optional(),
-  paymentSchedule: z.enum(paymentSchedules).optional(),
-  portionDefault: z.enum(portionDefaults).optional(),
-  defaultPickupWindowId: z.string().uuid().nullable().optional(),
-  planSlug: z.string().trim().max(64).nullable().optional(),
-  mealsPerWeek: z.number().int().min(1).max(56).nullable().optional(),
-  chefNotes: z.string().trim().max(4000).nullable().optional(),
-  membershipStatus: z.enum(membershipStatuses).optional(),
-});
+const updateCustomerSchema = z
+  .object({
+    userId: z.string().uuid(),
+    email: z.string().trim().email().max(255).optional(),
+    firstName: z.string().trim().max(127).optional(),
+    lastName: z.string().trim().max(127).optional(),
+    preferredName: z.string().trim().max(127).nullable().optional(),
+    name: z.string().trim().max(255).optional(),
+    phone: z.string().trim().max(32).nullable().optional(),
+    birthday: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .optional(),
+    favoriteCake: z.string().trim().max(255).nullable().optional(),
+    allergies: z.string().trim().max(2000).nullable().optional(),
+    dietaryTags: dietaryTagsSchema.optional(),
+    dietaryPreferences: dietaryPreferencesSchema.optional(),
+    dietaryPreferenceOther: z.string().trim().max(500).nullable().optional(),
+    foodAllergens: foodAllergensSchema.optional(),
+    foodAllergenOther: z.string().trim().max(500).nullable().optional(),
+    paymentSchedule: z.enum(paymentSchedules).optional(),
+    portionDefault: z.enum(portionDefaults).optional(),
+    defaultPickupWindowId: z.string().uuid().nullable().optional(),
+    planSlug: z.string().trim().max(64).nullable().optional(),
+    mealsPerWeek: z.number().int().min(1).max(56).nullable().optional(),
+    chefNotes: z.string().trim().max(4000).nullable().optional(),
+    membershipStatus: z.enum(membershipStatuses).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.dietaryPreferences?.includes("other") &&
+      data.dietaryPreferenceOther !== undefined &&
+      !data.dietaryPreferenceOther?.trim()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Other dietary preference description is required when "Other" is selected.',
+        path: ["dietaryPreferenceOther"],
+      });
+    }
+
+    if (
+      data.foodAllergens?.includes("other") &&
+      data.foodAllergenOther !== undefined &&
+      !data.foodAllergenOther?.trim()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Other allergen description is required when "Other" is selected.',
+        path: ["foodAllergenOther"],
+      });
+    }
+  });
 
 export const updateAdminCustomerProfile = createServerFn({ method: "POST" })
   .middleware([requireRoleMiddleware("admin")])

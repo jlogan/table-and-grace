@@ -36,6 +36,7 @@ import { users } from "./schema/users.ts";
 import { weeklyBatches } from "./schema/weekly-batches.ts";
 import { weeklyOrders } from "./schema/weekly-orders.ts";
 import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
+import type { DietaryPreferenceSlug, FoodAllergenSlug } from "@/lib/food-profile.ts";
 
 const PLAN_TAG_PREFIX = "plan:";
 const MEALS_TAG_PREFIX = "meals:";
@@ -80,6 +81,82 @@ export function parsePlanSlugFromTags(tags: string[] | null | undefined): string
   if (!tags?.length) return null;
   const tag = tags.find((t) => t.startsWith(PLAN_TAG_PREFIX));
   return tag ? tag.slice(PLAN_TAG_PREFIX.length) : null;
+}
+
+export type AdminFoodProfileFields = {
+  dietaryPreferences: DietaryPreferenceSlug[] | null;
+  dietaryPreferenceOther: string | null;
+  foodAllergens: FoodAllergenSlug[] | null;
+  foodAllergenOther: string | null;
+};
+
+export type AdminFoodProfileFieldInput = {
+  dietaryPreferences?: DietaryPreferenceSlug[];
+  dietaryPreferenceOther?: string | null;
+  foodAllergens?: FoodAllergenSlug[];
+  foodAllergenOther?: string | null;
+};
+
+export function hasAdminFoodProfileFieldInput(input: AdminFoodProfileFieldInput): boolean {
+  return (
+    input.dietaryPreferences !== undefined ||
+    input.dietaryPreferenceOther !== undefined ||
+    input.foodAllergens !== undefined ||
+    input.foodAllergenOther !== undefined
+  );
+}
+
+function requireMeaningfulTrimmedText(value: string | null | undefined, label: string): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) {
+    throw new Error(`${label} is required when "Other" is selected.`);
+  }
+  return trimmed;
+}
+
+/** Normalize structured food profile "other" fields against selected slugs. */
+export function normalizeAdminFoodProfileFields(
+  input: AdminFoodProfileFieldInput,
+  existing: AdminFoodProfileFields,
+): AdminFoodProfileFields {
+  const dietaryPreferences =
+    input.dietaryPreferences !== undefined
+      ? input.dietaryPreferences.length > 0
+        ? input.dietaryPreferences
+        : null
+      : existing.dietaryPreferences;
+
+  const foodAllergens =
+    input.foodAllergens !== undefined
+      ? input.foodAllergens.length > 0
+        ? input.foodAllergens
+        : null
+      : existing.foodAllergens;
+
+  const dietaryPreferenceOther = (dietaryPreferences ?? []).includes("other")
+    ? requireMeaningfulTrimmedText(
+        input.dietaryPreferenceOther !== undefined
+          ? input.dietaryPreferenceOther
+          : existing.dietaryPreferenceOther,
+        "Other dietary preference description",
+      )
+    : null;
+
+  const foodAllergenOther = (foodAllergens ?? []).includes("other")
+    ? requireMeaningfulTrimmedText(
+        input.foodAllergenOther !== undefined
+          ? input.foodAllergenOther
+          : existing.foodAllergenOther,
+        "Other allergen description",
+      )
+    : null;
+
+  return {
+    dietaryPreferences,
+    dietaryPreferenceOther,
+    foodAllergens,
+    foodAllergenOther,
+  };
 }
 
 export function parseMealsPerWeekFromTags(tags: string[] | null | undefined): number | null {
@@ -272,6 +349,10 @@ export async function getAdminCustomerDetail(userId: string): Promise<AdminCusto
       profilePhotoUrl: customerProfiles.profilePhotoUrl,
       allergies: customerProfiles.allergies,
       dietaryTags: customerProfiles.dietaryTags,
+      dietaryPreferences: customerProfiles.dietaryPreferences,
+      dietaryPreferenceOther: customerProfiles.dietaryPreferenceOther,
+      foodAllergens: customerProfiles.foodAllergens,
+      foodAllergenOther: customerProfiles.foodAllergenOther,
       portionDefault: customerProfiles.portionDefault,
       chefNotes: customerProfiles.chefNotes,
     })
@@ -354,6 +435,10 @@ export async function getAdminCustomerDetail(userId: string): Promise<AdminCusto
     profilePhotoUrl: row.profilePhotoUrl?.trim() || null,
     allergies: row.allergies,
     dietaryTags: displayDietaryTags(row.dietaryTags),
+    dietaryPreferences: row.dietaryPreferences ?? [],
+    dietaryPreferenceOther: row.dietaryPreferenceOther,
+    foodAllergens: row.foodAllergens ?? [],
+    foodAllergenOther: row.foodAllergenOther,
     portionDefault: row.portionDefault ?? "6oz",
     chefNotes: row.chefNotes,
     memberships: membershipRows.map((membership) => {
@@ -575,6 +660,10 @@ export type UpdateAdminCustomerInput = {
   favoriteCake?: string | null;
   allergies?: string | null;
   dietaryTags?: string[];
+  dietaryPreferences?: DietaryPreferenceSlug[];
+  dietaryPreferenceOther?: string | null;
+  foodAllergens?: FoodAllergenSlug[];
+  foodAllergenOther?: string | null;
   paymentSchedule?: PaymentSchedule;
   portionDefault?: PortionDefault;
   defaultPickupWindowId?: string | null;
@@ -604,7 +693,13 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
   }
 
   const [profile] = await db
-    .select({ dietaryTags: customerProfiles.dietaryTags })
+    .select({
+      dietaryTags: customerProfiles.dietaryTags,
+      dietaryPreferences: customerProfiles.dietaryPreferences,
+      dietaryPreferenceOther: customerProfiles.dietaryPreferenceOther,
+      foodAllergens: customerProfiles.foodAllergens,
+      foodAllergenOther: customerProfiles.foodAllergenOther,
+    })
     .from(customerProfiles)
     .where(eq(customerProfiles.userId, input.userId))
     .limit(1);
@@ -638,6 +733,10 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
     defaultPickupWindowId?: string | null;
     chefNotes?: string | null;
     dietaryTags?: string[] | null;
+    dietaryPreferences?: DietaryPreferenceSlug[] | null;
+    dietaryPreferenceOther?: string | null;
+    foodAllergens?: FoodAllergenSlug[] | null;
+    foodAllergenOther?: string | null;
     paymentScheduleSetBy: "admin";
   } = { paymentScheduleSetBy: "admin" };
 
@@ -667,6 +766,33 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
   }
   if (input.chefNotes !== undefined) {
     profileUpdates.chefNotes = input.chefNotes;
+  }
+  if (
+    hasAdminFoodProfileFieldInput({
+      dietaryPreferences: input.dietaryPreferences,
+      dietaryPreferenceOther: input.dietaryPreferenceOther,
+      foodAllergens: input.foodAllergens,
+      foodAllergenOther: input.foodAllergenOther,
+    })
+  ) {
+    const normalizedFoodProfile = normalizeAdminFoodProfileFields(
+      {
+        dietaryPreferences: input.dietaryPreferences,
+        dietaryPreferenceOther: input.dietaryPreferenceOther,
+        foodAllergens: input.foodAllergens,
+        foodAllergenOther: input.foodAllergenOther,
+      },
+      {
+        dietaryPreferences: profile.dietaryPreferences,
+        dietaryPreferenceOther: profile.dietaryPreferenceOther,
+        foodAllergens: profile.foodAllergens,
+        foodAllergenOther: profile.foodAllergenOther,
+      },
+    );
+    profileUpdates.dietaryPreferences = normalizedFoodProfile.dietaryPreferences;
+    profileUpdates.dietaryPreferenceOther = normalizedFoodProfile.dietaryPreferenceOther;
+    profileUpdates.foodAllergens = normalizedFoodProfile.foodAllergens;
+    profileUpdates.foodAllergenOther = normalizedFoodProfile.foodAllergenOther;
   }
 
   if (input.dietaryTags !== undefined) {

@@ -64,6 +64,13 @@
       "when": 1787467275157,
       "tag": "0008_customer_crm_phase2a",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1787470000000,
+      "tag": "0009_food_profile_phase1",
+      "breakpoints": true
     }
   ]
 }

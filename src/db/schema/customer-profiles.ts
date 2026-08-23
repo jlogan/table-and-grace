@@ -10,6 +10,8 @@ import {
   varchar,
 } from "drizzle-orm/mysql-core";
 
+import type { DietaryPreferenceSlug, FoodAllergenSlug } from "@/lib/food-profile.ts";
+
 import { paymentScheduleSetBy, paymentSchedules } from "./payment-schedules.ts";
 import { pickupWindows } from "./pickup-windows.ts";
 import { users } from "./users.ts";
@@ -28,6 +30,10 @@ export const customerProfiles = mysqlTable("customer_profiles", {
   profilePhotoUrl: varchar("profile_photo_url", { length: 512 }),
   dietaryTags: json("dietary_tags").$type<string[]>(),
   allergies: text("allergies"),
+  dietaryPreferences: json("dietary_preferences").$type<DietaryPreferenceSlug[]>(),
+  dietaryPreferenceOther: text("dietary_preference_other"),
+  foodAllergens: json("food_allergens").$type<FoodAllergenSlug[]>(),
+  foodAllergenOther: text("food_allergen_other"),
   portionDefault: mysqlEnum("portion_default", portionDefaults).notNull().default("6oz"),
   householdSize: int("household_size"),
   chefNotes: text("chef_notes"),

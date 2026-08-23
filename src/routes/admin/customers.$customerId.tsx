@@ -11,13 +11,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -25,8 +18,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
-import type { PortionDefault } from "@/db/schema/customer-profiles";
+import {
+  FoodProfileEditFields,
+  FoodProfileReadOnlyView,
+  PreviousFoodInformation,
+} from "@/components/admin/customer-food-profile";
+import {
+  foodProfileFormStateFromCustomer,
+  hasPreviousFoodInformation,
+  type FoodProfileFormState,
+} from "@/lib/customer-food-profile-form";
 import type { AdminCustomerDetail } from "@/orders/admin-types";
 import { cn } from "@/lib/utils";
 import { formatDateString } from "@/lib/dates";
@@ -65,29 +66,8 @@ type ProfileFormState = {
   phone: string;
   birthday: string;
   favoriteCake: string;
-  portionDefault: PortionDefault;
-  dietaryTagsInput: string;
-  allergies: string;
-  chefNotes: string;
+  foodProfile: FoodProfileFormState;
 };
-
-function formatDietaryTagsInput(tags: string[]): string {
-  return tags.join(", ");
-}
-
-function parseDietaryTagsInput(value: string): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const part of value.split(",")) {
-    const tag = part.trim();
-    if (!tag) continue;
-    const key = tag.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(tag);
-  }
-  return result;
-}
 
 function formStateFromCustomer(customer: AdminCustomerDetail): ProfileFormState {
   return {
@@ -98,10 +78,7 @@ function formStateFromCustomer(customer: AdminCustomerDetail): ProfileFormState 
     phone: customer.phone ?? "",
     birthday: customer.birthday ?? "",
     favoriteCake: customer.favoriteCake ?? "",
-    portionDefault: customer.portionDefault,
-    dietaryTagsInput: formatDietaryTagsInput(customer.dietaryTags),
-    allergies: customer.allergies ?? "",
-    chefNotes: customer.chefNotes ?? "",
+    foodProfile: foodProfileFormStateFromCustomer(customer),
   };
 }
 
@@ -120,10 +97,6 @@ function initialsFromCustomer(customer: {
     return (parts[0]?.slice(0, 2) ?? "??").toUpperCase();
   }
   return customer.email.slice(0, 2).toUpperCase();
-}
-
-function formatPortionDefault(portion: PortionDefault): string {
-  return portion === "4oz" ? "4 oz" : "6 oz";
 }
 
 function ReadOnlyField({ label, value }: { label: string; value: string | null | undefined }) {
@@ -218,10 +191,16 @@ function AdminCustomerProfilePage() {
           phone: form.phone.trim() || null,
           birthday: form.birthday || null,
           favoriteCake: form.favoriteCake.trim() || null,
-          portionDefault: form.portionDefault,
-          dietaryTags: parseDietaryTagsInput(form.dietaryTagsInput),
-          allergies: form.allergies.trim() || null,
-          chefNotes: form.chefNotes.trim() || null,
+          portionDefault: form.foodProfile.portionDefault,
+          dietaryPreferences: form.foodProfile.dietaryPreferences,
+          dietaryPreferenceOther: form.foodProfile.dietaryPreferences.includes("other")
+            ? form.foodProfile.dietaryPreferenceOther.trim() || null
+            : null,
+          foodAllergens: form.foodProfile.foodAllergens,
+          foodAllergenOther: form.foodProfile.foodAllergens.includes("other")
+            ? form.foodProfile.foodAllergenOther.trim() || null
+            : null,
+          chefNotes: form.foodProfile.chefNotes.trim() || null,
         },
       });
       const next = await refreshFn({ data: { userId: customerId } });
@@ -378,51 +357,14 @@ function AdminCustomerProfilePage() {
           <CardTitle className="text-base">Food Profile</CardTitle>
           <CardDescription>Kitchen preferences for this customer.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="profile-portion">Default portion</Label>
-            <Select
-              value={form.portionDefault}
-              onValueChange={(v) =>
-                setForm((prev) => ({ ...prev, portionDefault: v as PortionDefault }))
-              }
-            >
-              <SelectTrigger id="profile-portion">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="4oz">4 oz</SelectItem>
-                <SelectItem value="6oz">6 oz</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-            <Label htmlFor="profile-dietary-tags">Dietary preferences</Label>
-            <Input
-              id="profile-dietary-tags"
-              value={form.dietaryTagsInput}
-              onChange={(e) => setForm((prev) => ({ ...prev, dietaryTagsInput: e.target.value }))}
-              placeholder="gluten-free, low-sodium"
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-            <Label htmlFor="profile-allergies">Allergies</Label>
-            <Textarea
-              id="profile-allergies"
-              value={form.allergies}
-              onChange={(e) => setForm((prev) => ({ ...prev, allergies: e.target.value }))}
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-            <Label htmlFor="profile-chef-notes">Chef notes</Label>
-            <Textarea
-              id="profile-chef-notes"
-              value={form.chefNotes}
-              onChange={(e) => setForm((prev) => ({ ...prev, chefNotes: e.target.value }))}
-              rows={8}
-            />
-          </div>
+        <CardContent className="space-y-6">
+          {hasPreviousFoodInformation(customer) ? (
+            <PreviousFoodInformation customer={customer} />
+          ) : null}
+          <FoodProfileEditFields
+            form={form.foodProfile}
+            onChange={(foodProfile) => setForm((prev) => ({ ...prev, foodProfile }))}
+          />
         </CardContent>
       </Card>
     </form>
@@ -454,31 +396,8 @@ function AdminCustomerProfilePage() {
         <CardHeader>
           <CardTitle className="text-base">Food Profile</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1">
-            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Dietary preferences
-            </dt>
-            <dd className="text-sm">
-              {customer.dietaryTags.length > 0 ? (
-                <ul className="flex flex-wrap gap-1.5">
-                  {customer.dietaryTags.map((tag) => (
-                    <li key={tag}>
-                      <Badge variant="secondary">{tag}</Badge>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              )}
-            </dd>
-          </div>
-          <ReadOnlyField label="Allergies" value={customer.allergies} />
-          <ReadOnlyField label="Chef notes" value={customer.chefNotes} />
-          <ReadOnlyField
-            label="Default portion"
-            value={formatPortionDefault(customer.portionDefault)}
-          />
+        <CardContent>
+          <FoodProfileReadOnlyView customer={customer} />
         </CardContent>
       </Card>
     </div>
