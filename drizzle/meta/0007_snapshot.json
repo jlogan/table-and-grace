@@ -2265,6 +2265,13 @@
           ],
           "isUnique": true
         },
+        "weekly_orders_user_id_idx": {
+          "name": "weekly_orders_user_id_idx",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        },
         "weekly_orders_membership_id_idx": {
           "name": "weekly_orders_membership_id_idx",
           "columns": [
