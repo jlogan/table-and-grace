@@ -34,6 +34,8 @@ export type PublishEligibleMember = {
   userId: string;
   email: string;
   name: string | null;
+  planSlug: string | null;
+  planName: string | null;
   mealsPerWeek: number;
   portionDefault: Portion;
   defaultPickupWindowId: string | null;
@@ -360,29 +362,24 @@ export async function listPublishEligibleMembers(): Promise<PublishEligibility> 
       userId: memberships.userId,
       email: users.email,
       name: users.name,
+      planSlug: memberships.planSlug,
+      planName: planCategories.name,
       mealsPerWeek: memberships.mealsPerWeek,
       dietaryTags: customerProfiles.dietaryTags,
       portionDefault: memberships.portionDefault,
       defaultPickupWindowId: customerProfiles.defaultPickupWindowId,
-      updatedAt: memberships.updatedAt,
     })
     .from(memberships)
     .innerJoin(users, eq(memberships.userId, users.id))
     .innerJoin(customerProfiles, eq(memberships.userId, customerProfiles.userId))
+    .leftJoin(planCategories, eq(memberships.planSlug, planCategories.slug))
     .where(eq(memberships.status, "active"))
-    .orderBy(desc(memberships.updatedAt), asc(memberships.id));
-
-  const byUser = new Map<string, (typeof activeRows)[number]>();
-  for (const row of activeRows) {
-    if (!byUser.has(row.userId)) {
-      byUser.set(row.userId, row);
-    }
-  }
+    .orderBy(asc(users.email), asc(memberships.id));
 
   const eligible: PublishEligibleMember[] = [];
   const unresolved: PublishEligibility["unresolved"] = [];
 
-  for (const row of byUser.values()) {
+  for (const row of activeRows) {
     const resolvedMeals = resolveMemberMealsPerWeek(row.mealsPerWeek, row.dietaryTags);
     if (resolvedMeals == null) {
       unresolved.push({ userId: row.userId, email: row.email, name: row.name });
@@ -394,13 +391,13 @@ export async function listPublishEligibleMembers(): Promise<PublishEligibility> 
       userId: row.userId,
       email: row.email,
       name: row.name,
+      planSlug: row.planSlug,
+      planName: row.planSlug ? (row.planName ?? row.planSlug) : null,
       mealsPerWeek: resolvedMeals,
       portionDefault: row.portionDefault,
       defaultPickupWindowId: row.defaultPickupWindowId,
     });
   }
-
-  eligible.sort((a, b) => a.email.localeCompare(b.email));
 
   return {
     eligible,
@@ -454,7 +451,7 @@ function assertPublishPreconditions(
   return eligibility.eligible;
 }
 
-/** Open customer review: create pending orders for active members only. */
+/** Open customer review: create pending orders for each eligible active membership. */
 export async function publishWeeklyBatch(batchId: string): Promise<{ ordersCreated: number }> {
   const db = getDb();
 
@@ -505,16 +502,18 @@ export async function publishWeeklyBatch(batchId: string): Promise<{ ordersCreat
   const menuById = new Map(menuDetails.map((m) => [m.id, m]));
 
   const existingOrders = await db
-    .select({ userId: weeklyOrders.userId })
+    .select({ membershipId: weeklyOrders.membershipId })
     .from(weeklyOrders)
     .where(eq(weeklyOrders.batchId, batchId));
 
-  const existingUserIds = new Set(existingOrders.map((o) => o.userId));
+  const existingMembershipIds = new Set(
+    existingOrders.map((o) => o.membershipId).filter((id): id is string => id != null),
+  );
 
   let ordersCreated = 0;
 
   for (const customer of customers) {
-    if (existingUserIds.has(customer.userId)) continue;
+    if (existingMembershipIds.has(customer.membershipId)) continue;
 
     const orderId = randomUUID();
     const pickupWindowId = customer.defaultPickupWindowId ?? batch.pickupWindowId;

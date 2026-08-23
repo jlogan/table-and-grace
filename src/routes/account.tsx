@@ -115,7 +115,9 @@ function Account() {
 
       {reviewOrders.length > 0 ? (
         <section className="mt-8">
-          <h2 className="text-lg font-semibold tracking-tight">Review your order</h2>
+          <h2 className="text-lg font-semibold tracking-tight">
+            {reviewOrders.length === 1 ? "Review your order" : "Review your orders"}
+          </h2>
           <ul className="mt-3 space-y-3">
             {reviewOrders.map((order) => (
               <li key={order.id}>
@@ -139,7 +141,9 @@ function Account() {
         ) : reviewOrders.length === 0 ? (
           <Card className="mt-3">
             <CardContent className="py-8 text-center">
-              <p className="text-muted-foreground">You don&apos;t have a current weekly order.</p>
+              <p className="text-muted-foreground">
+                You don&apos;t have any current weekly orders.
+              </p>
               <p className="mt-2 text-sm text-muted-foreground">
                 When Chef Margaux publishes your batch, it will appear here for review.
               </p>

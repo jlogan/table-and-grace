@@ -69,8 +69,8 @@ function AdminOrdersPage() {
       <div>
         <h2 className="text-lg font-semibold tracking-tight text-foreground">Orders</h2>
         <p className="text-sm text-muted-foreground">
-          Weekly orders with catalog menu items, portion sizes (4 oz / 6 oz), and line pricing from
-          the active item catalog.
+          Weekly orders by membership — catalog menu items, portion sizes (4 oz / 6 oz), and line
+          pricing from the active item catalog. Legacy imported orders may show no plan.
         </p>
       </div>
 
@@ -141,7 +141,9 @@ function AdminOrdersPage() {
                           <div className="text-xs text-muted-foreground">{order.customerEmail}</div>
                         ) : null}
                       </TableCell>
-                      <TableCell className="text-sm">{order.planName ?? "—"}</TableCell>
+                      <TableCell className="text-sm">
+                        {order.planName ?? (order.membershipId ? "—" : "Legacy")}
+                      </TableCell>
                       <TableCell>{formatDateString(order.batchWeekStart, "MMM d")}</TableCell>
                       <TableCell>
                         <Badge variant={orderStatusBadgeVariant(order.status)}>

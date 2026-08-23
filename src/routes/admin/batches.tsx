@@ -415,7 +415,7 @@ function AdminBatchesPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Eligible members</CardTitle>
+                <CardTitle className="text-base">Eligible memberships</CardTitle>
                 <CardDescription>
                   {eligibleCount} active membership{eligibleCount === 1 ? "" : "s"} will receive
                   orders when you publish
@@ -457,6 +457,7 @@ function AdminBatchesPage() {
                               <Badge variant="default">Active</Badge>
                             </div>
                             <p className="mt-1 text-muted-foreground">
+                              {member.planName ? <>{member.planName} · </> : null}
                               {member.mealsPerWeek} meal{member.mealsPerWeek === 1 ? "" : "s"}/wk
                               {" · "}
                               {member.portionDefault} portion
@@ -467,7 +468,7 @@ function AdminBatchesPage() {
                     </ul>
                     {eligibleCount > 6 ? (
                       <p className="mt-3 text-sm text-muted-foreground">
-                        + {eligibleCount - 6} more eligible member
+                        + {eligibleCount - 6} more eligible membership
                         {eligibleCount - 6 === 1 ? "" : "s"}
                       </p>
                     ) : null}
@@ -475,7 +476,7 @@ function AdminBatchesPage() {
                 )}
                 {unresolvedMembers.length > 0 ? (
                   <p className="mt-3 text-sm text-destructive">
-                    {unresolvedMembers.length} active member
+                    {unresolvedMembers.length} active membership
                     {unresolvedMembers.length === 1 ? "" : "s"} missing meals per week:{" "}
                     {unresolvedMembers
                       .slice(0, 3)
