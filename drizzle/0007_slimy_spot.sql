@@ -1,3 +1,18 @@
+SET @has_weekly_orders_batch_id_idx = (
+  SELECT COUNT(1)
+  FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'weekly_orders'
+    AND INDEX_NAME = 'weekly_orders_batch_id_idx'
+);--> statement-breakpoint
+SET @add_weekly_orders_batch_id_idx = IF(
+  @has_weekly_orders_batch_id_idx = 0,
+  'ALTER TABLE `weekly_orders` ADD INDEX `weekly_orders_batch_id_idx` (`batch_id`)',
+  'SELECT 1'
+);--> statement-breakpoint
+PREPARE add_weekly_orders_batch_id_idx_stmt FROM @add_weekly_orders_batch_id_idx;--> statement-breakpoint
+EXECUTE add_weekly_orders_batch_id_idx_stmt;--> statement-breakpoint
+DEALLOCATE PREPARE add_weekly_orders_batch_id_idx_stmt;--> statement-breakpoint
 SET @has_weekly_orders_user_id_idx = (
   SELECT COUNT(1)
   FROM INFORMATION_SCHEMA.STATISTICS

@@ -73,6 +73,7 @@ export const weeklyOrders = mysqlTable(
   },
   (table) => [
     uniqueIndex("weekly_orders_batch_membership_idx").on(table.batchId, table.membershipId),
+    index("weekly_orders_batch_id_idx").on(table.batchId),
     index("weekly_orders_user_id_idx").on(table.userId),
     index("weekly_orders_membership_id_idx").on(table.membershipId),
   ],

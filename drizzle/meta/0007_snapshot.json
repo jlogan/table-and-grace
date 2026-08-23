@@ -2265,6 +2265,13 @@
           ],
           "isUnique": true
         },
+        "weekly_orders_batch_id_idx": {
+          "name": "weekly_orders_batch_id_idx",
+          "columns": [
+            "batch_id"
+          ],
+          "isUnique": false
+        },
         "weekly_orders_user_id_idx": {
           "name": "weekly_orders_user_id_idx",
           "columns": [
