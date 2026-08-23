@@ -11,6 +11,7 @@ import type {
 } from "@/orders/admin-types.ts";
 
 import { toIsoDateString } from "@/lib/dates.ts";
+import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
 
 import { getDb } from "./index.server.ts";
 import { batchItems } from "./schema/batch-items.ts";
@@ -523,6 +524,7 @@ export async function publishWeeklyBatch(batchId: string): Promise<{ ordersCreat
       id: orderId,
       batchId,
       userId: customer.userId,
+      membershipId: customer.membershipId,
       status: "pending_customer_review",
       pickupWindowId,
       subtotalCents: 0,
@@ -575,6 +577,10 @@ export async function listAdminOrders(batchId?: string): Promise<AdminOrderRow[]
       customerName: users.name,
       customerEmail: users.email,
       status: weeklyOrders.status,
+      membershipId: weeklyOrders.membershipId,
+      membershipPlanSlug: memberships.planSlug,
+      planCategoryName: planCategories.name,
+      membershipPaymentSchedule: memberships.paymentSchedule,
       profilePaymentSchedule: customerProfiles.paymentSchedule,
       paymentScheduleSnapshot: weeklyOrders.paymentScheduleSnapshot,
       totalCents: weeklyOrders.totalCents,
@@ -589,22 +595,34 @@ export async function listAdminOrders(batchId?: string): Promise<AdminOrderRow[]
     .innerJoin(weeklyBatches, eq(weeklyOrders.batchId, weeklyBatches.id))
     .innerJoin(users, eq(weeklyOrders.userId, users.id))
     .leftJoin(customerProfiles, eq(weeklyOrders.userId, customerProfiles.userId))
+    .leftJoin(memberships, eq(weeklyOrders.membershipId, memberships.id))
+    .leftJoin(planCategories, eq(memberships.planSlug, planCategories.slug))
     .leftJoin(pickupWindows, eq(weeklyOrders.pickupWindowId, pickupWindows.id))
     .where(conditions)
     .orderBy(desc(weeklyBatches.weekStart), users.email);
 
-  return rows.map((row) => ({
-    id: row.id,
-    batchId: row.batchId,
-    batchWeekStart: toIsoDateString(row.batchWeekStart) ?? "",
-    customerName: row.customerName,
-    customerEmail: row.customerEmail,
-    status: row.status,
-    paymentSchedule: row.paymentScheduleSnapshot ?? row.profilePaymentSchedule ?? "weekly_autopay",
-    totalCents: row.totalCents,
-    itemCount: row.itemCount,
-    pickupLabel: row.pickupLabel,
-    customerVisibleNote: row.customerVisibleNote,
-    reviewDeadline: row.reviewDeadline?.toISOString() ?? null,
-  }));
+  return rows.map((row) => {
+    const planSlug = row.membershipPlanSlug ?? null;
+    return {
+      id: row.id,
+      batchId: row.batchId,
+      batchWeekStart: toIsoDateString(row.batchWeekStart) ?? "",
+      customerName: row.customerName,
+      customerEmail: row.customerEmail,
+      status: row.status,
+      paymentSchedule: resolveOrderPaymentSchedule({
+        paymentScheduleSnapshot: row.paymentScheduleSnapshot,
+        membershipPaymentSchedule: row.membershipPaymentSchedule,
+        profilePaymentSchedule: row.profilePaymentSchedule,
+      }),
+      totalCents: row.totalCents,
+      itemCount: row.itemCount,
+      pickupLabel: row.pickupLabel,
+      customerVisibleNote: row.customerVisibleNote,
+      reviewDeadline: row.reviewDeadline?.toISOString() ?? null,
+      membershipId: row.membershipId,
+      planSlug,
+      planName: planSlug ? (row.planCategoryName ?? planSlug) : null,
+    };
+  });
 }

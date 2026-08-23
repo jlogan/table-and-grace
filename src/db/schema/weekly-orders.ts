@@ -1,4 +1,5 @@
 import {
+  index,
   int,
   mysqlEnum,
   mysqlTable,
@@ -9,6 +10,7 @@ import {
 } from "drizzle-orm/mysql-core";
 
 import { billingCycles } from "./billing-cycles.ts";
+import { memberships } from "./memberships.ts";
 import { paymentSchedules } from "./payment-schedules.ts";
 import { pickupWindows } from "./pickup-windows.ts";
 import { users } from "./users.ts";
@@ -37,6 +39,10 @@ export const weeklyOrders = mysqlTable(
     userId: varchar("user_id", { length: 36 })
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    /** Nullable until membership-scoped orders roll out; historical rows stay null. */
+    membershipId: varchar("membership_id", { length: 36 }).references(() => memberships.id, {
+      onDelete: "restrict",
+    }),
     status: mysqlEnum("status", orderStatuses).notNull().default("draft"),
     pickupWindowId: varchar("pickup_window_id", { length: 36 }).references(() => pickupWindows.id, {
       onDelete: "set null",
@@ -65,7 +71,10 @@ export const weeklyOrders = mysqlTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
   },
-  (table) => [uniqueIndex("weekly_orders_batch_user_idx").on(table.batchId, table.userId)],
+  (table) => [
+    uniqueIndex("weekly_orders_batch_user_idx").on(table.batchId, table.userId),
+    index("weekly_orders_membership_id_idx").on(table.membershipId),
+  ],
 );
 
 export type WeeklyOrder = typeof weeklyOrders.$inferSelect;

@@ -112,6 +112,7 @@ function AdminOrdersPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Customer</TableHead>
+                <TableHead>Plan</TableHead>
                 <TableHead>Batch</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Payment</TableHead>
@@ -124,7 +125,7 @@ function AdminOrdersPage() {
             <TableBody>
               {orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground">
+                  <TableCell colSpan={9} className="text-muted-foreground">
                     No orders yet.
                   </TableCell>
                 </TableRow>
@@ -140,6 +141,7 @@ function AdminOrdersPage() {
                           <div className="text-xs text-muted-foreground">{order.customerEmail}</div>
                         ) : null}
                       </TableCell>
+                      <TableCell className="text-sm">{order.planName ?? "—"}</TableCell>
                       <TableCell>{formatDateString(order.batchWeekStart, "MMM d")}</TableCell>
                       <TableCell>
                         <Badge variant={orderStatusBadgeVariant(order.status)}>

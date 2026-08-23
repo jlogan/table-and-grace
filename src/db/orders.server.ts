@@ -3,13 +3,16 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { AuthError } from "@/auth/user.server";
+import type { PaymentSchedule } from "@/db/schema/payment-schedules.ts";
 import type { CustomerOrderSummary, WeeklyOrderReview } from "@/orders/review-types.ts";
+import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
 export type { CustomerOrderSummary, WeeklyOrderReview } from "@/orders/review-types.ts";
 export { centsToLabel, formatOrderStatus, formatPaymentSchedule } from "@/orders/review-types.ts";
 
 import { getDb } from "./index.server.ts";
 import { batchItems } from "./schema/batch-items.ts";
 import { customerProfiles } from "./schema/customer-profiles.ts";
+import { memberships } from "./schema/memberships.ts";
 import { menuItems } from "./schema/menu-items.ts";
 import { orderComments } from "./schema/order-comments.ts";
 import { orderLineRequests } from "./schema/order-line-requests.ts";
@@ -102,6 +105,39 @@ async function loadOrderOwnedByUser(orderId: string, userId: string) {
   return row;
 }
 
+async function loadOrderMembershipContext(membershipId: string | null): Promise<{
+  membershipPaymentSchedule: PaymentSchedule | null;
+  planSlug: string | null;
+  planName: string | null;
+}> {
+  if (!membershipId) {
+    return { membershipPaymentSchedule: null, planSlug: null, planName: null };
+  }
+
+  const db = getDb();
+  const [row] = await db
+    .select({
+      paymentSchedule: memberships.paymentSchedule,
+      planSlug: memberships.planSlug,
+      planName: planCategories.name,
+    })
+    .from(memberships)
+    .leftJoin(planCategories, eq(memberships.planSlug, planCategories.slug))
+    .where(eq(memberships.id, membershipId))
+    .limit(1);
+
+  if (!row) {
+    return { membershipPaymentSchedule: null, planSlug: null, planName: null };
+  }
+
+  const planSlug = row.planSlug ?? null;
+  return {
+    membershipPaymentSchedule: row.paymentSchedule,
+    planSlug,
+    planName: planSlug ? (row.planName ?? planSlug) : null,
+  };
+}
+
 async function recalculateOrderTotals(orderId: string): Promise<void> {
   const db = getDb();
   const lines = await db
@@ -137,11 +173,16 @@ export async function listCustomerOrderSummaries(userId: string): Promise<Custom
       batchWeekStart: weeklyBatches.weekStart,
       reviewDeadline: weeklyBatches.reviewDeadline,
       pickupLabel: pickupWindows.label,
+      membershipId: weeklyOrders.membershipId,
+      planSlug: memberships.planSlug,
+      planName: planCategories.name,
       itemCount: sql<number>`coalesce(sum(${orderLines.qty}), 0)`.mapWith(Number),
     })
     .from(weeklyOrders)
     .innerJoin(weeklyBatches, eq(weeklyOrders.batchId, weeklyBatches.id))
     .leftJoin(pickupWindows, eq(weeklyOrders.pickupWindowId, pickupWindows.id))
+    .leftJoin(memberships, eq(weeklyOrders.membershipId, memberships.id))
+    .leftJoin(planCategories, eq(memberships.planSlug, planCategories.slug))
     .leftJoin(orderLines, eq(orderLines.orderId, weeklyOrders.id))
     .where(eq(weeklyOrders.userId, userId))
     .groupBy(
@@ -154,23 +195,32 @@ export async function listCustomerOrderSummaries(userId: string): Promise<Custom
       weeklyBatches.weekStart,
       weeklyBatches.reviewDeadline,
       pickupWindows.label,
+      weeklyOrders.membershipId,
+      memberships.planSlug,
+      planCategories.name,
     )
     .orderBy(desc(weeklyBatches.weekStart))
     .limit(20);
 
-  return rows.map((row) => ({
-    id: row.id,
-    status: row.status,
-    totalCents: row.totalCents,
-    tipCents: row.tipCents,
-    batchWeekStart: String(row.batchWeekStart),
-    pickupLabel: row.pickupLabel,
-    reviewDeadline: row.reviewDeadline ? row.reviewDeadline.toISOString() : null,
-    needsReview: EDITABLE_ORDER_STATUSES.includes(row.status),
-    itemCount: row.itemCount,
-    receiptNumber: row.receiptNumber,
-    externalOrderNumber: row.externalOrderNumber,
-  }));
+  return rows.map((row) => {
+    const planSlug = row.planSlug ?? null;
+    return {
+      id: row.id,
+      status: row.status,
+      totalCents: row.totalCents,
+      tipCents: row.tipCents,
+      batchWeekStart: String(row.batchWeekStart),
+      pickupLabel: row.pickupLabel,
+      reviewDeadline: row.reviewDeadline ? row.reviewDeadline.toISOString() : null,
+      needsReview: EDITABLE_ORDER_STATUSES.includes(row.status),
+      itemCount: row.itemCount,
+      receiptNumber: row.receiptNumber,
+      externalOrderNumber: row.externalOrderNumber,
+      membershipId: row.membershipId,
+      planSlug,
+      planName: planSlug ? (row.planName ?? planSlug) : null,
+    };
+  });
 }
 
 /** Full weekly review payload for a customer-owned order. */
@@ -188,7 +238,12 @@ export async function getOrderReviewForCustomer(
     .where(eq(customerProfiles.userId, userId))
     .limit(1);
 
-  const paymentSchedule = profile?.paymentSchedule ?? "weekly_autopay";
+  const membershipContext = await loadOrderMembershipContext(order.membershipId);
+  const paymentSchedule = resolveOrderPaymentSchedule({
+    paymentScheduleSnapshot: order.paymentScheduleSnapshot,
+    membershipPaymentSchedule: membershipContext.membershipPaymentSchedule,
+    profilePaymentSchedule: profile?.paymentSchedule,
+  });
 
   let pickupWindow: WeeklyOrderReview["pickupWindow"] = null;
   if (order.pickupWindowId) {
@@ -278,6 +333,9 @@ export async function getOrderReviewForCustomer(
       customerVisibleNote: order.customerVisibleNote,
       reviewedAt: order.reviewedAt?.toISOString() ?? null,
       approvedAt: order.approvedAt?.toISOString() ?? null,
+      membershipId: order.membershipId,
+      planSlug: membershipContext.planSlug,
+      planName: membershipContext.planName,
     },
     batch: {
       id: batch.id,
@@ -518,7 +576,12 @@ export async function approveCustomerOrder(
     .where(eq(customerProfiles.userId, userId))
     .limit(1);
 
-  const paymentSchedule = profile?.paymentSchedule ?? "weekly_autopay";
+  const membershipContext = await loadOrderMembershipContext(order.membershipId);
+  const paymentSchedule = resolveOrderPaymentSchedule({
+    paymentScheduleSnapshot: null,
+    membershipPaymentSchedule: membershipContext.membershipPaymentSchedule,
+    profilePaymentSchedule: profile?.paymentSchedule,
+  });
   const chargeDueAt = batch.chargeScheduledAt ?? batch.reviewDeadline ?? new Date();
   const now = new Date();
 

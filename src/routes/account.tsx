@@ -259,6 +259,9 @@ function OrderSummaryCard({
                 <p className="text-sm text-muted-foreground">Week of {weekLabel}</p>
               )}
               <p className="mt-1 font-medium">{order.pickupLabel ?? "Pickup details pending"}</p>
+              {order.planName ? (
+                <p className="mt-1 text-sm text-muted-foreground">Plan: {order.planName}</p>
+              ) : null}
               <p className="mt-1 text-sm text-muted-foreground">
                 {order.itemCount} item{order.itemCount === 1 ? "" : "s"} ·{" "}
                 {centsToLabel(order.totalCents)}

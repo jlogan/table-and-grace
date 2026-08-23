@@ -213,6 +213,12 @@ function OrderReviewPage() {
               {review.order.externalOrderNumber}
             </p>
           ) : null}
+          {review.order.planName ? (
+            <p>
+              <span className="text-muted-foreground">Plan: </span>
+              {review.order.planName}
+            </p>
+          ) : null}
           <p>
             <span className="text-muted-foreground">Payment schedule: </span>
             {formatPaymentSchedule(paymentSchedule)}

@@ -125,6 +125,7 @@ function AdminDashboardPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Customer</TableHead>
+                <TableHead>Plan</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Payment</TableHead>
                 <TableHead>Pickup</TableHead>
@@ -135,7 +136,7 @@ function AdminDashboardPage() {
             <TableBody>
               {overview.recentOrders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground">
+                  <TableCell colSpan={7} className="text-muted-foreground">
                     No orders for the current batch yet.{" "}
                     <Link
                       to="/admin/batches"
@@ -157,6 +158,7 @@ function AdminDashboardPage() {
                           <div className="text-xs text-muted-foreground">{order.customerEmail}</div>
                         ) : null}
                       </TableCell>
+                      <TableCell className="text-sm">{order.planName ?? "—"}</TableCell>
                       <TableCell>
                         <Badge variant={orderStatusBadgeVariant(order.status)}>
                           {formatOrderStatus(order.status)}

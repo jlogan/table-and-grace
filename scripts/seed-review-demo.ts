@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 
 import { closeDb, getDb } from "../src/db/index.server.ts";
 import { batchItems } from "../src/db/schema/batch-items.ts";
+import { memberships } from "../src/db/schema/memberships.ts";
 import { menuItems } from "../src/db/schema/menu-items.ts";
 import { orderLines } from "../src/db/schema/order-lines.ts";
 import { pickupWindows } from "../src/db/schema/pickup-windows.ts";
@@ -139,12 +140,19 @@ async function main() {
 
   const orderId = catalogUuid("menu_item", `demo-order-${user.id}`);
 
+  const [activeMembership] = await db
+    .select({ id: memberships.id })
+    .from(memberships)
+    .where(eq(memberships.userId, user.id))
+    .limit(1);
+
   await db
     .insert(weeklyOrders)
     .values({
       id: orderId,
       batchId: DEMO_BATCH_ID,
       userId: user.id,
+      membershipId: activeMembership?.id ?? null,
       status: "pending_customer_review",
       pickupWindowId: pickup?.id ?? null,
       subtotalCents: 0,
@@ -155,6 +163,7 @@ async function main() {
       set: {
         status: "pending_customer_review",
         pickupWindowId: pickup?.id ?? null,
+        membershipId: activeMembership?.id ?? null,
       },
     });
 

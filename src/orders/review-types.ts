@@ -14,6 +14,9 @@ export type CustomerOrderSummary = {
   itemCount: number;
   receiptNumber: string | null;
   externalOrderNumber: string | null;
+  membershipId: string | null;
+  planSlug: string | null;
+  planName: string | null;
 };
 
 export type ReviewOrderLine = {
@@ -66,6 +69,9 @@ export type WeeklyOrderReview = {
     customerVisibleNote: string | null;
     reviewedAt: string | null;
     approvedAt: string | null;
+    membershipId: string | null;
+    planSlug: string | null;
+    planName: string | null;
   };
   batch: {
     id: string;

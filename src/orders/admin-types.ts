@@ -69,6 +69,9 @@ export type AdminOrderRow = {
   pickupLabel: string | null;
   customerVisibleNote: string | null;
   reviewDeadline: string | null;
+  membershipId: string | null;
+  planSlug: string | null;
+  planName: string | null;
 };
 
 export function formatBatchStatus(status: BatchStatus): string {
