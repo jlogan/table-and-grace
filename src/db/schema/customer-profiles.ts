@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   int,
   json,
   mysqlEnum,
@@ -21,6 +22,10 @@ export const customerProfiles = mysqlTable("customer_profiles", {
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
   phone: varchar("phone", { length: 32 }),
+  birthday: date("birthday"),
+  favoriteCake: varchar("favorite_cake", { length: 255 }),
+  /** Set when upload/storage is implemented; not exposed as a raw URL in admin UI. */
+  profilePhotoUrl: varchar("profile_photo_url", { length: 512 }),
   dietaryTags: json("dietary_tags").$type<string[]>(),
   allergies: text("allergies"),
   portionDefault: mysqlEnum("portion_default", portionDefaults).notNull().default("6oz"),

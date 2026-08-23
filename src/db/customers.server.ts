@@ -4,6 +4,7 @@ import { parseISO } from "date-fns";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type {
+  AdminCustomerDetail,
   AdminCustomerRow,
   AdminDashboardOverview,
   AdminMembershipRow,
@@ -32,7 +33,9 @@ import { pickupWindows } from "./schema/pickup-windows.ts";
 import { planCategories } from "./schema/plan-categories.ts";
 import type { PaymentSchedule } from "./schema/payment-schedules.ts";
 import { users } from "./schema/users.ts";
+import { weeklyBatches } from "./schema/weekly-batches.ts";
 import { weeklyOrders } from "./schema/weekly-orders.ts";
+import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
 
 const PLAN_TAG_PREFIX = "plan:";
 const MEALS_TAG_PREFIX = "meals:";
@@ -142,7 +145,7 @@ function parsePausedUntilDate(isoDate: string): Date {
   return parseISO(`${normalized}T12:00:00`);
 }
 
-/** All customer-role users with profile and order counts (membership joined separately). */
+/** All customer-role users with profile and order counts (memberships joined separately). */
 export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
   const db = getDb();
 
@@ -151,14 +154,17 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
       userId: users.id,
       email: users.email,
       name: users.name,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      preferredName: users.preferredName,
       role: users.role,
       createdAt: users.createdAt,
-      paymentSchedule: customerProfiles.paymentSchedule,
       portionDefault: customerProfiles.portionDefault,
       phone: customerProfiles.phone,
+      birthday: customerProfiles.birthday,
+      favoriteCake: customerProfiles.favoriteCake,
+      profilePhotoUrl: customerProfiles.profilePhotoUrl,
       allergies: customerProfiles.allergies,
-      defaultPickupWindowId: customerProfiles.defaultPickupWindowId,
-      pickupLabel: pickupWindows.label,
       chefNotes: customerProfiles.chefNotes,
       dietaryTags: customerProfiles.dietaryTags,
       orderCount: sql<number>`(
@@ -167,7 +173,6 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
     })
     .from(users)
     .leftJoin(customerProfiles, eq(users.id, customerProfiles.userId))
-    .leftJoin(pickupWindows, eq(customerProfiles.defaultPickupWindowId, pickupWindows.id))
     .where(eq(users.role, "customer"))
     .orderBy(desc(users.createdAt));
 
@@ -176,7 +181,6 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
       ? []
       : await db
           .select({
-            id: memberships.id,
             userId: memberships.userId,
             status: memberships.status,
             updatedAt: memberships.updatedAt,
@@ -195,26 +199,105 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
     paused: 1,
     cancelled: 2,
   };
-  const sortedMembershipRows = [...membershipRows].sort((a, b) => {
-    const rankDiff = membershipStatusRank[a.status] - membershipStatusRank[b.status];
-    if (rankDiff !== 0) return rankDiff;
-    return b.updatedAt.getTime() - a.updatedAt.getTime();
-  });
 
-  const primaryMembershipByUser = new Map<
+  const membershipStatsByUser = new Map<
     string,
-    { membershipId: string; membershipStatus: MembershipStatus }
+    { count: number; activeCount: number; primaryStatus: MembershipStatus | null }
   >();
-  for (const membership of sortedMembershipRows) {
-    if (primaryMembershipByUser.has(membership.userId)) continue;
-    primaryMembershipByUser.set(membership.userId, {
-      membershipId: membership.id,
-      membershipStatus: membership.status,
+
+  const membershipsByUser = new Map<string, typeof membershipRows>();
+  for (const membership of membershipRows) {
+    const list = membershipsByUser.get(membership.userId) ?? [];
+    list.push(membership);
+    membershipsByUser.set(membership.userId, list);
+  }
+
+  for (const [userId, userMemberships] of membershipsByUser) {
+    const sorted = [...userMemberships].sort((a, b) => {
+      const rankDiff = membershipStatusRank[a.status] - membershipStatusRank[b.status];
+      if (rankDiff !== 0) return rankDiff;
+      return b.updatedAt.getTime() - a.updatedAt.getTime();
+    });
+    membershipStatsByUser.set(userId, {
+      count: sorted.length,
+      activeCount: sorted.filter((m) => m.status === "active").length,
+      primaryStatus: sorted[0]?.status ?? null,
     });
   }
 
-  const planSlugs = rows
-    .map((row) => parsePlanSlugFromTags(row.dietaryTags))
+  return rows.map((row) => {
+    const stats = membershipStatsByUser.get(row.userId);
+    return {
+      userId: row.userId,
+      email: row.email,
+      name: row.name,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      preferredName: row.preferredName,
+      role: row.role,
+      createdAt: row.createdAt.toISOString(),
+      phone: row.phone,
+      birthday: toIsoDateString(row.birthday),
+      favoriteCake: row.favoriteCake,
+      hasProfilePhoto: Boolean(row.profilePhotoUrl?.trim()),
+      allergies: row.allergies,
+      dietaryTags: displayDietaryTags(row.dietaryTags),
+      membershipCount: stats?.count ?? 0,
+      activeMembershipCount: stats?.activeCount ?? 0,
+      primaryMembershipStatus: stats?.primaryStatus ?? null,
+      portionDefault: row.portionDefault ?? "6oz",
+      chefNotes: row.chefNotes,
+      orderCount: row.orderCount,
+    };
+  });
+}
+
+/** Full customer profile with memberships and order history for the admin detail page. */
+export async function getAdminCustomerDetail(userId: string): Promise<AdminCustomerDetail | null> {
+  const db = getDb();
+
+  const [row] = await db
+    .select({
+      userId: users.id,
+      email: users.email,
+      name: users.name,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      preferredName: users.preferredName,
+      createdAt: users.createdAt,
+      role: users.role,
+      phone: customerProfiles.phone,
+      birthday: customerProfiles.birthday,
+      favoriteCake: customerProfiles.favoriteCake,
+      profilePhotoUrl: customerProfiles.profilePhotoUrl,
+      allergies: customerProfiles.allergies,
+      dietaryTags: customerProfiles.dietaryTags,
+      portionDefault: customerProfiles.portionDefault,
+      chefNotes: customerProfiles.chefNotes,
+    })
+    .from(users)
+    .leftJoin(customerProfiles, eq(users.id, customerProfiles.userId))
+    .where(and(eq(users.id, userId), eq(users.role, "customer")))
+    .limit(1);
+
+  if (!row) return null;
+
+  const membershipRows = await db
+    .select({
+      membershipId: memberships.id,
+      membershipStatus: memberships.status,
+      pausedUntil: memberships.pausedUntil,
+      planSlug: memberships.planSlug,
+      mealsPerWeek: memberships.mealsPerWeek,
+      portionDefault: memberships.portionDefault,
+      paymentSchedule: memberships.paymentSchedule,
+    })
+    .from(memberships)
+    .where(eq(memberships.userId, userId))
+    .orderBy(desc(memberships.updatedAt));
+
+  const planSlugs = membershipRows
+    .map((m) => m.planSlug)
     .filter((slug): slug is string => Boolean(slug));
 
   const planNamesBySlug = new Map<string, string>();
@@ -229,31 +312,83 @@ export async function listAdminCustomers(): Promise<AdminCustomerRow[]> {
     }
   }
 
-  return rows.map((row) => {
-    const planSlug = parsePlanSlugFromTags(row.dietaryTags);
-    const primaryMembership = primaryMembershipByUser.get(row.userId);
-    return {
-      userId: row.userId,
-      email: row.email,
-      name: row.name,
-      role: row.role,
-      createdAt: row.createdAt.toISOString(),
-      phone: row.phone,
-      allergies: row.allergies,
-      dietaryTags: displayDietaryTags(row.dietaryTags),
-      membershipId: primaryMembership?.membershipId ?? null,
-      membershipStatus: primaryMembership?.membershipStatus ?? null,
-      paymentSchedule: row.paymentSchedule ?? "weekly_autopay",
-      portionDefault: row.portionDefault ?? "6oz",
-      defaultPickupWindowId: row.defaultPickupWindowId,
-      pickupLabel: row.pickupLabel,
-      chefNotes: row.chefNotes,
-      planSlug,
-      planName: planSlug ? (planNamesBySlug.get(planSlug) ?? planSlug) : null,
-      mealsPerWeek: parseMealsPerWeekFromTags(row.dietaryTags),
-      orderCount: row.orderCount,
-    };
-  });
+  const orderRows = await db
+    .select({
+      id: weeklyOrders.id,
+      batchId: weeklyOrders.batchId,
+      batchWeekStart: weeklyBatches.weekStart,
+      status: weeklyOrders.status,
+      membershipId: weeklyOrders.membershipId,
+      membershipPlanSlug: memberships.planSlug,
+      planCategoryName: planCategories.name,
+      membershipPaymentSchedule: memberships.paymentSchedule,
+      profilePaymentSchedule: customerProfiles.paymentSchedule,
+      paymentScheduleSnapshot: weeklyOrders.paymentScheduleSnapshot,
+      totalCents: weeklyOrders.totalCents,
+      pickupLabel: pickupWindows.label,
+      itemCount: sql<number>`coalesce((
+        select sum(ol.qty) from order_lines ol where ol.order_id = ${weeklyOrders.id}
+      ), 0)`.mapWith(Number),
+    })
+    .from(weeklyOrders)
+    .innerJoin(weeklyBatches, eq(weeklyOrders.batchId, weeklyBatches.id))
+    .leftJoin(customerProfiles, eq(weeklyOrders.userId, customerProfiles.userId))
+    .leftJoin(memberships, eq(weeklyOrders.membershipId, memberships.id))
+    .leftJoin(planCategories, eq(memberships.planSlug, planCategories.slug))
+    .leftJoin(pickupWindows, eq(weeklyOrders.pickupWindowId, pickupWindows.id))
+    .where(eq(weeklyOrders.userId, userId))
+    .orderBy(desc(weeklyBatches.weekStart));
+
+  return {
+    userId: row.userId,
+    email: row.email,
+    name: row.name,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    preferredName: row.preferredName,
+    createdAt: row.createdAt.toISOString(),
+    phone: row.phone,
+    birthday: toIsoDateString(row.birthday),
+    favoriteCake: row.favoriteCake,
+    hasProfilePhoto: Boolean(row.profilePhotoUrl?.trim()),
+    allergies: row.allergies,
+    dietaryTags: displayDietaryTags(row.dietaryTags),
+    portionDefault: row.portionDefault ?? "6oz",
+    chefNotes: row.chefNotes,
+    memberships: membershipRows.map((membership) => {
+      const planSlug = membership.planSlug ?? null;
+      return {
+        membershipId: membership.membershipId,
+        membershipStatus: membership.membershipStatus,
+        pausedUntil: toIsoDateString(membership.pausedUntil),
+        planSlug,
+        planName: planSlug ? (planNamesBySlug.get(planSlug) ?? planSlug) : null,
+        mealsPerWeek: membership.mealsPerWeek,
+        portionDefault: membership.portionDefault,
+        paymentSchedule: membership.paymentSchedule,
+      };
+    }),
+    orders: orderRows.map((order) => {
+      const planSlug = order.membershipPlanSlug ?? null;
+      return {
+        id: order.id,
+        batchId: order.batchId,
+        batchWeekStart: toIsoDateString(order.batchWeekStart) ?? "",
+        status: order.status,
+        paymentSchedule: resolveOrderPaymentSchedule({
+          paymentScheduleSnapshot: order.paymentScheduleSnapshot,
+          membershipPaymentSchedule: order.membershipPaymentSchedule,
+          profilePaymentSchedule: order.profilePaymentSchedule,
+        }),
+        totalCents: order.totalCents,
+        itemCount: order.itemCount,
+        pickupLabel: order.pickupLabel,
+        membershipId: order.membershipId,
+        planSlug,
+        planName: planSlug ? (order.planCategoryName ?? planSlug) : null,
+      };
+    }),
+  };
 }
 
 /** All memberships for the admin memberships view. */
@@ -340,8 +475,14 @@ export async function listAdminPlanCategories(): Promise<AdminPlanCategoryOption
 
 export type CreateAdminCustomerInput = {
   email: string;
+  firstName: string;
+  lastName: string;
+  preferredName?: string;
+  /** Legacy field — not set on new structured-name creates. */
   name?: string;
   phone?: string;
+  birthday?: string;
+  favoriteCake?: string;
   allergies?: string;
   dietaryTags?: string[];
   paymentSchedule?: PaymentSchedule;
@@ -372,10 +513,18 @@ export async function createAdminCustomer(input: CreateAdminCustomerInput): Prom
   const userTags = normalizeUserDietaryTags(input.dietaryTags ?? []);
   const dietaryTags = mergePlanTags(userTags, input.planSlug, input.mealsPerWeek);
 
+  const firstName = input.firstName.trim();
+  const lastName = input.lastName.trim();
+  const structuredFullName = [firstName, lastName].filter(Boolean).join(" ");
+
   await db.insert(users).values({
     id: userId,
     email,
-    name: input.name?.trim() || null,
+    firstName,
+    lastName,
+    preferredName: input.preferredName?.trim() || null,
+    // Keep legacy name populated for older auth/order/admin displays without using preferred name.
+    name: structuredFullName || null,
     role: "customer",
     passwordHash: null,
   });
@@ -383,6 +532,11 @@ export async function createAdminCustomer(input: CreateAdminCustomerInput): Prom
   await db.insert(customerProfiles).values({
     userId,
     phone: input.phone?.trim() || null,
+    birthday:
+      input.birthday && toIsoDateString(input.birthday)
+        ? parseISO(`${toIsoDateString(input.birthday)}T12:00:00`)
+        : null,
+    favoriteCake: input.favoriteCake?.trim() || null,
     allergies: input.allergies?.trim() || null,
     paymentSchedule: input.paymentSchedule ?? "weekly_autopay",
     portionDefault: input.portionDefault ?? "6oz",
@@ -410,8 +564,14 @@ export async function createAdminCustomer(input: CreateAdminCustomerInput): Prom
 export type UpdateAdminCustomerInput = {
   userId: string;
   email?: string;
+  firstName?: string;
+  lastName?: string;
+  preferredName?: string | null;
+  /** Legacy field — only set explicitly; otherwise synced from first + last on save. */
   name?: string;
   phone?: string | null;
+  birthday?: string | null;
+  favoriteCake?: string | null;
   allergies?: string | null;
   dietaryTags?: string[];
   paymentSchedule?: PaymentSchedule;
@@ -428,7 +588,12 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
   const db = getDb();
 
   const [user] = await db
-    .select({ id: users.id, role: users.role })
+    .select({
+      id: users.id,
+      role: users.role,
+      firstName: users.firstName,
+      lastName: users.lastName,
+    })
     .from(users)
     .where(eq(users.id, input.userId))
     .limit(1);
@@ -466,6 +631,8 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
     paymentSchedule?: PaymentSchedule;
     portionDefault?: PortionDefault;
     phone?: string | null;
+    birthday?: Date | null;
+    favoriteCake?: string | null;
     allergies?: string | null;
     defaultPickupWindowId?: string | null;
     chefNotes?: string | null;
@@ -481,6 +648,15 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
   }
   if (input.phone !== undefined) {
     profileUpdates.phone = input.phone?.trim() || null;
+  }
+  if (input.birthday !== undefined) {
+    profileUpdates.birthday =
+      input.birthday && toIsoDateString(input.birthday)
+        ? parseISO(`${toIsoDateString(input.birthday)}T12:00:00`)
+        : null;
+  }
+  if (input.favoriteCake !== undefined) {
+    profileUpdates.favoriteCake = input.favoriteCake?.trim() || null;
   }
   if (input.allergies !== undefined) {
     profileUpdates.allergies = input.allergies?.trim() || null;
@@ -515,11 +691,36 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
       .where(eq(customerProfiles.userId, input.userId));
   }
 
+  const userUpdates: {
+    email?: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    preferredName?: string | null;
+    name?: string | null;
+  } = {};
+
+  if (input.firstName !== undefined) {
+    userUpdates.firstName = input.firstName.trim() || null;
+  }
+  if (input.lastName !== undefined) {
+    userUpdates.lastName = input.lastName.trim() || null;
+  }
+  if (input.preferredName !== undefined) {
+    userUpdates.preferredName = input.preferredName?.trim() || null;
+  }
   if (input.name !== undefined) {
-    await db
-      .update(users)
-      .set({ name: input.name.trim() || null })
-      .where(eq(users.id, input.userId));
+    userUpdates.name = input.name.trim() || null;
+  } else if (input.firstName !== undefined || input.lastName !== undefined) {
+    const first = input.firstName !== undefined ? input.firstName.trim() : user.firstName?.trim();
+    const last = input.lastName !== undefined ? input.lastName.trim() : user.lastName?.trim();
+    const structuredFullName = [first, last].filter(Boolean).join(" ");
+    if (structuredFullName) {
+      userUpdates.name = structuredFullName;
+    }
+  }
+
+  if (Object.keys(userUpdates).length > 0) {
+    await db.update(users).set(userUpdates).where(eq(users.id, input.userId));
   }
 
   if (input.membershipStatus !== undefined) {

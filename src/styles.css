@@ -295,3 +295,25 @@ html {
   line-height: 1.05;
   text-transform: uppercase;
 }
+
+@media print {
+  .admin-app [data-sidebar="sidebar"],
+  .admin-app header,
+  .admin-app .no-print {
+    display: none !important;
+  }
+
+  .admin-app [data-sidebar="inset"] {
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .admin-app [data-sidebar="inset"] > div {
+    padding: 0 !important;
+  }
+
+  .customer-profile-print {
+    break-inside: avoid;
+  }
+}

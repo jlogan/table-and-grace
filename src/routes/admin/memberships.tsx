@@ -33,6 +33,7 @@ import {
   membershipStatusBadgeVariant,
 } from "@/orders/admin-types";
 import { formatDateString } from "@/lib/dates";
+import { customerDisplayLabel } from "@/lib/customer-names";
 import {
   createAdminMembershipRecord,
   fetchAdminCustomers,
@@ -648,7 +649,7 @@ function MembershipForm({
                 </SelectItem>
               ) : (
                 customers?.map((customer) => {
-                  const label = customer.name?.trim() || customer.email;
+                  const label = customerDisplayLabel(customer);
                   return (
                     <SelectItem key={customer.userId} value={customer.userId}>
                       {label} ({customer.email})

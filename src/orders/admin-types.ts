@@ -103,24 +103,72 @@ export type AdminPlanCategoryOption = {
 export type AdminCustomerRow = {
   userId: string;
   email: string;
+  /** Legacy single-field name; preserved for existing rows. */
   name: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  preferredName: string | null;
   role: UserRole;
   createdAt: string;
   phone: string | null;
+  birthday: string | null;
+  favoriteCake: string | null;
+  /** Present when a photo URL exists; not edited via raw URL field in admin UI. */
+  hasProfilePhoto: boolean;
   allergies: string | null;
   /** Display tags only — excludes reserved plan:/meals: prefixes. */
   dietaryTags: string[];
-  membershipId: string | null;
-  membershipStatus: MembershipStatus | null;
-  paymentSchedule: PaymentSchedule;
+  membershipCount: number;
+  activeMembershipCount: number;
+  primaryMembershipStatus: MembershipStatus | null;
   portionDefault: PortionDefault;
-  defaultPickupWindowId: string | null;
-  pickupLabel: string | null;
   chefNotes: string | null;
+  orderCount: number;
+};
+
+export type AdminCustomerMembershipSummary = {
+  membershipId: string;
+  membershipStatus: MembershipStatus;
+  pausedUntil: string | null;
   planSlug: string | null;
   planName: string | null;
   mealsPerWeek: number | null;
-  orderCount: number;
+  portionDefault: PortionDefault;
+  paymentSchedule: PaymentSchedule;
+};
+
+export type AdminCustomerOrderSummary = {
+  id: string;
+  batchId: string;
+  batchWeekStart: string;
+  status: OrderStatus;
+  paymentSchedule: PaymentSchedule;
+  totalCents: number;
+  itemCount: number;
+  pickupLabel: string | null;
+  membershipId: string | null;
+  planSlug: string | null;
+  planName: string | null;
+};
+
+export type AdminCustomerDetail = {
+  userId: string;
+  email: string;
+  name: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  preferredName: string | null;
+  createdAt: string;
+  phone: string | null;
+  birthday: string | null;
+  favoriteCake: string | null;
+  hasProfilePhoto: boolean;
+  allergies: string | null;
+  dietaryTags: string[];
+  portionDefault: PortionDefault;
+  chefNotes: string | null;
+  memberships: AdminCustomerMembershipSummary[];
+  orders: AdminCustomerOrderSummary[];
 };
 
 export type AdminMembershipRow = {

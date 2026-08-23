@@ -9,6 +9,9 @@ export const users = mysqlTable("users", {
   /** Null for magic-link-only accounts until a password is set. */
   passwordHash: varchar("password_hash", { length: 255 }),
   name: varchar("name", { length: 255 }),
+  firstName: varchar("first_name", { length: 127 }),
+  lastName: varchar("last_name", { length: 127 }),
+  preferredName: varchar("preferred_name", { length: 127 }),
   role: mysqlEnum("role", userRoles).notNull().default("customer"),
   /** Stripe Customer id for saved cards and off-session weekly charges. */
   stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),

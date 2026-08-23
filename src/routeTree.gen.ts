@@ -37,6 +37,9 @@ import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as FeedbackOrderIdRouteImport } from './routes/feedback.$orderId'
 import { Route as PlansCategoryIdRouteImport } from './routes/plans.$categoryId'
 import { Route as AccountOrdersOrderIdRouteImport } from './routes/account.orders.$orderId'
+import { Route as AdminCustomersIndexRouteImport } from './routes/admin/customers.index'
+import { Route as AdminCustomersCustomerIdRouteImport } from './routes/admin/customers.$customerId'
+import { Route as AdminCustomersNewRouteImport } from './routes/admin/customers.new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -178,6 +181,22 @@ const AccountOrdersOrderIdRoute = AccountOrdersOrderIdRouteImport.update({
   path: '/orders/$orderId',
   getParentRoute: () => AccountRoute,
 } as any)
+const AdminCustomersIndexRoute = AdminCustomersIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminCustomersRoute,
+} as any)
+const AdminCustomersCustomerIdRoute =
+  AdminCustomersCustomerIdRouteImport.update({
+    id: '/$customerId',
+    path: '/$customerId',
+    getParentRoute: () => AdminCustomersRoute,
+  } as any)
+const AdminCustomersNewRoute = AdminCustomersNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AdminCustomersRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -197,7 +216,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/batches': typeof AdminBatchesRoute
-  '/admin/customers': typeof AdminCustomersRoute
+  '/admin/customers': typeof AdminCustomersRouteWithChildren
   '/admin/items': typeof AdminItemsRoute
   '/admin/kitchen': typeof AdminKitchenRoute
   '/admin/memberships': typeof AdminMembershipsRoute
@@ -208,6 +227,9 @@ export interface FileRoutesByFullPath {
   '/plans/$categoryId': typeof PlansCategoryIdRoute
   '/admin/': typeof AdminIndexRoute
   '/account/orders/$orderId': typeof AccountOrdersOrderIdRoute
+  '/admin/customers/$customerId': typeof AdminCustomersCustomerIdRoute
+  '/admin/customers/new': typeof AdminCustomersNewRoute
+  '/admin/customers/': typeof AdminCustomersIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -226,7 +248,6 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/batches': typeof AdminBatchesRoute
-  '/admin/customers': typeof AdminCustomersRoute
   '/admin/items': typeof AdminItemsRoute
   '/admin/kitchen': typeof AdminKitchenRoute
   '/admin/memberships': typeof AdminMembershipsRoute
@@ -237,6 +258,9 @@ export interface FileRoutesByTo {
   '/plans/$categoryId': typeof PlansCategoryIdRoute
   '/admin': typeof AdminIndexRoute
   '/account/orders/$orderId': typeof AccountOrdersOrderIdRoute
+  '/admin/customers/$customerId': typeof AdminCustomersCustomerIdRoute
+  '/admin/customers/new': typeof AdminCustomersNewRoute
+  '/admin/customers': typeof AdminCustomersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -257,7 +281,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/batches': typeof AdminBatchesRoute
-  '/admin/customers': typeof AdminCustomersRoute
+  '/admin/customers': typeof AdminCustomersRouteWithChildren
   '/admin/items': typeof AdminItemsRoute
   '/admin/kitchen': typeof AdminKitchenRoute
   '/admin/memberships': typeof AdminMembershipsRoute
@@ -268,6 +292,9 @@ export interface FileRoutesById {
   '/plans/$categoryId': typeof PlansCategoryIdRoute
   '/admin/': typeof AdminIndexRoute
   '/account/orders/$orderId': typeof AccountOrdersOrderIdRoute
+  '/admin/customers/$customerId': typeof AdminCustomersCustomerIdRoute
+  '/admin/customers/new': typeof AdminCustomersNewRoute
+  '/admin/customers/': typeof AdminCustomersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -300,6 +327,9 @@ export interface FileRouteTypes {
     | '/plans/$categoryId'
     | '/admin/'
     | '/account/orders/$orderId'
+    | '/admin/customers/$customerId'
+    | '/admin/customers/new'
+    | '/admin/customers/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -318,7 +348,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/sitemap.xml'
     | '/admin/batches'
-    | '/admin/customers'
     | '/admin/items'
     | '/admin/kitchen'
     | '/admin/memberships'
@@ -329,6 +358,9 @@ export interface FileRouteTypes {
     | '/plans/$categoryId'
     | '/admin'
     | '/account/orders/$orderId'
+    | '/admin/customers/$customerId'
+    | '/admin/customers/new'
+    | '/admin/customers'
   id:
     | '__root__'
     | '/'
@@ -359,6 +391,9 @@ export interface FileRouteTypes {
     | '/plans/$categoryId'
     | '/admin/'
     | '/account/orders/$orderId'
+    | '/admin/customers/$customerId'
+    | '/admin/customers/new'
+    | '/admin/customers/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -580,12 +615,49 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountOrdersOrderIdRouteImport
       parentRoute: typeof AccountRoute
     }
+    '/admin/customers/': {
+      id: '/admin/customers/'
+      path: '/'
+      fullPath: '/admin/customers/'
+      preLoaderRoute: typeof AdminCustomersIndexRouteImport
+      parentRoute: typeof AdminCustomersRoute
+    }
+    '/admin/customers/$customerId': {
+      id: '/admin/customers/$customerId'
+      path: '/$customerId'
+      fullPath: '/admin/customers/$customerId'
+      preLoaderRoute: typeof AdminCustomersCustomerIdRouteImport
+      parentRoute: typeof AdminCustomersRoute
+    }
+    '/admin/customers/new': {
+      id: '/admin/customers/new'
+      path: '/new'
+      fullPath: '/admin/customers/new'
+      preLoaderRoute: typeof AdminCustomersNewRouteImport
+      parentRoute: typeof AdminCustomersRoute
+    }
   }
 }
 
+interface AdminCustomersRouteChildren {
+  AdminCustomersCustomerIdRoute: typeof AdminCustomersCustomerIdRoute
+  AdminCustomersNewRoute: typeof AdminCustomersNewRoute
+  AdminCustomersIndexRoute: typeof AdminCustomersIndexRoute
+}
+
+const AdminCustomersRouteChildren: AdminCustomersRouteChildren = {
+  AdminCustomersCustomerIdRoute: AdminCustomersCustomerIdRoute,
+  AdminCustomersNewRoute: AdminCustomersNewRoute,
+  AdminCustomersIndexRoute: AdminCustomersIndexRoute,
+}
+
+const AdminCustomersRouteWithChildren = AdminCustomersRoute._addFileChildren(
+  AdminCustomersRouteChildren,
+)
+
 interface AdminRouteRouteChildren {
   AdminBatchesRoute: typeof AdminBatchesRoute
-  AdminCustomersRoute: typeof AdminCustomersRoute
+  AdminCustomersRoute: typeof AdminCustomersRouteWithChildren
   AdminItemsRoute: typeof AdminItemsRoute
   AdminKitchenRoute: typeof AdminKitchenRoute
   AdminMembershipsRoute: typeof AdminMembershipsRoute
@@ -596,7 +668,7 @@ interface AdminRouteRouteChildren {
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminBatchesRoute: AdminBatchesRoute,
-  AdminCustomersRoute: AdminCustomersRoute,
+  AdminCustomersRoute: AdminCustomersRouteWithChildren,
   AdminItemsRoute: AdminItemsRoute,
   AdminKitchenRoute: AdminKitchenRoute,
   AdminMembershipsRoute: AdminMembershipsRoute,

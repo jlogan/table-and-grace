@@ -15,6 +15,7 @@ import {
 import {
   createAdminCustomer,
   createAdminMembership,
+  getAdminCustomerDetail,
   getAdminDashboardOverview,
   getBatchMealDemand,
   listAdminCustomers,
@@ -110,6 +111,21 @@ export const fetchAdminCustomers = createServerFn({ method: "GET" })
   .middleware([requireRoleMiddleware("admin")])
   .handler(async () => listAdminCustomers());
 
+const customerIdSchema = z.object({
+  userId: z.string().uuid(),
+});
+
+export const fetchAdminCustomerDetail = createServerFn({ method: "GET" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(customerIdSchema)
+  .handler(async ({ data }) => {
+    const customer = await getAdminCustomerDetail(data.userId);
+    if (!customer) {
+      throw new Error("Customer not found.");
+    }
+    return customer;
+  });
+
 export const fetchAdminMemberships = createServerFn({ method: "GET" })
   .middleware([requireRoleMiddleware("admin")])
   .handler(async () => listAdminMemberships());
@@ -132,8 +148,16 @@ const dietaryTagsSchema = z
 
 const createCustomerSchema = z.object({
   email: z.string().trim().email().max(255),
+  firstName: z.string().trim().min(1).max(127),
+  lastName: z.string().trim().min(1).max(127),
+  preferredName: z.string().trim().max(127).optional(),
   name: z.string().trim().max(255).optional(),
   phone: z.string().trim().max(32).optional(),
+  birthday: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  favoriteCake: z.string().trim().max(255).optional(),
   allergies: z.string().trim().max(2000).optional(),
   dietaryTags: dietaryTagsSchema.optional(),
   paymentSchedule: z.enum(paymentSchedules).optional(),
@@ -141,7 +165,7 @@ const createCustomerSchema = z.object({
   defaultPickupWindowId: z.string().uuid().optional(),
   planSlug: z.string().trim().max(64).optional(),
   mealsPerWeek: z.number().int().min(1).max(56).optional(),
-  chefNotes: z.string().trim().max(2000).optional(),
+  chefNotes: z.string().trim().max(4000).optional(),
   activateMembership: z.boolean().optional(),
 });
 
@@ -156,8 +180,17 @@ export const createAdminCustomerAccount = createServerFn({ method: "POST" })
 const updateCustomerSchema = z.object({
   userId: z.string().uuid(),
   email: z.string().trim().email().max(255).optional(),
+  firstName: z.string().trim().max(127).optional(),
+  lastName: z.string().trim().max(127).optional(),
+  preferredName: z.string().trim().max(127).nullable().optional(),
   name: z.string().trim().max(255).optional(),
   phone: z.string().trim().max(32).nullable().optional(),
+  birthday: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
+  favoriteCake: z.string().trim().max(255).nullable().optional(),
   allergies: z.string().trim().max(2000).nullable().optional(),
   dietaryTags: dietaryTagsSchema.optional(),
   paymentSchedule: z.enum(paymentSchedules).optional(),
@@ -165,7 +198,7 @@ const updateCustomerSchema = z.object({
   defaultPickupWindowId: z.string().uuid().nullable().optional(),
   planSlug: z.string().trim().max(64).nullable().optional(),
   mealsPerWeek: z.number().int().min(1).max(56).nullable().optional(),
-  chefNotes: z.string().trim().max(2000).nullable().optional(),
+  chefNotes: z.string().trim().max(4000).nullable().optional(),
   membershipStatus: z.enum(membershipStatuses).optional(),
 });
 
