@@ -351,6 +351,7 @@ export async function getAdminCustomerDetail(userId: string): Promise<AdminCusto
     birthday: toIsoDateString(row.birthday),
     favoriteCake: row.favoriteCake,
     hasProfilePhoto: Boolean(row.profilePhotoUrl?.trim()),
+    profilePhotoUrl: row.profilePhotoUrl?.trim() || null,
     allergies: row.allergies,
     dietaryTags: displayDietaryTags(row.dietaryTags),
     portionDefault: row.portionDefault ?? "6oz",

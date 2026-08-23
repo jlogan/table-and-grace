@@ -430,6 +430,7 @@ function AdminBatchesPage() {
                     No eligible active members —{" "}
                     <Link
                       to="/admin/memberships"
+                      search={{ userId: undefined, add: undefined }}
                       className="text-primary underline-offset-4 hover:underline"
                     >
                       activate a membership

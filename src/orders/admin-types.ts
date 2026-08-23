@@ -163,6 +163,8 @@ export type AdminCustomerDetail = {
   birthday: string | null;
   favoriteCake: string | null;
   hasProfilePhoto: boolean;
+  /** Admin-only display URL when a photo exists; never edited via raw URL field in UI. */
+  profilePhotoUrl: string | null;
   allergies: string | null;
   dietaryTags: string[];
   portionDefault: PortionDefault;

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,11 @@ import {
 import { centsToLabel, formatPaymentSchedule } from "@/orders/review-types";
 
 export const Route = createFileRoute("/admin/memberships")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    userId:
+      typeof search.userId === "string" && search.userId.trim() ? search.userId.trim() : undefined,
+    add: search.add === "1" || search.add === 1 ? ("1" as const) : undefined,
+  }),
   beforeLoad: async () => {
     const [memberships, customers, planCategories] = await Promise.all([
       fetchAdminMemberships(),
@@ -77,12 +82,14 @@ type MembershipFormData = {
 
 function AdminMembershipsPage() {
   const { memberships: initialMemberships, customers, planCategories } = Route.useRouteContext();
+  const search = Route.useSearch();
   const createFn = useServerFn(createAdminMembershipRecord);
   const updateFn = useServerFn(updateAdminMembershipRecord);
   const refreshMembershipsFn = useServerFn(fetchAdminMemberships);
 
   const [memberships, setMemberships] = useState(initialMemberships);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [addFormUserId, setAddFormUserId] = useState<string | undefined>();
   const [editingMembership, setEditingMembership] = useState<AdminMembershipRow | null>(null);
   const [pausingMembershipId, setPausingMembershipId] = useState<string | null>(null);
   const [pauseUntilDate, setPauseUntilDate] = useState("");
@@ -95,6 +102,17 @@ function AdminMembershipsPage() {
     const labelB = (b.name?.trim() || b.email).toLowerCase();
     return labelA.localeCompare(labelB);
   });
+
+  useEffect(() => {
+    if (search.add === "1" && search.userId) {
+      const isValidCustomer = customers.some((customer) => customer.userId === search.userId);
+      if (isValidCustomer) {
+        setEditingMembership(null);
+        setAddFormUserId(search.userId);
+        setShowAddForm(true);
+      }
+    }
+  }, [search.add, search.userId, customers]);
 
   async function refreshMemberships() {
     setMemberships(await refreshMembershipsFn());
@@ -160,6 +178,7 @@ function AdminMembershipsPage() {
 
   function closeForms() {
     setShowAddForm(false);
+    setAddFormUserId(undefined);
     setEditingMembership(null);
   }
 
@@ -178,6 +197,7 @@ function AdminMembershipsPage() {
           <Button
             onClick={() => {
               setEditingMembership(null);
+              setAddFormUserId(undefined);
               setShowAddForm(true);
             }}
           >
@@ -206,9 +226,11 @@ function AdminMembershipsPage() {
           </CardHeader>
           <CardContent>
             <MembershipForm
+              key={addFormUserId ?? "add-membership"}
               mode="add"
               customers={customerOptions}
               planCategories={planCategories}
+              initialUserId={addFormUserId}
               onCancel={closeForms}
               onSubmit={async (data) => {
                 setError(null);
@@ -536,6 +558,7 @@ function MembershipForm({
   customers,
   membership,
   planCategories,
+  initialUserId,
   onCancel,
   onSubmit,
 }: {
@@ -547,10 +570,11 @@ function MembershipForm({
   }>;
   membership?: AdminMembershipRow;
   planCategories: Array<{ slug: string; name: string }>;
+  initialUserId?: string;
   onCancel: () => void;
   onSubmit: (data: MembershipFormData) => Promise<void>;
 }) {
-  const [userId, setUserId] = useState(membership?.userId ?? "");
+  const [userId, setUserId] = useState(initialUserId ?? membership?.userId ?? "");
   const [planSlug, setPlanSlug] = useState(membership?.planSlug ?? "");
   const [mealsPerWeek, setMealsPerWeek] = useState(
     membership?.mealsPerWeek != null ? String(membership.mealsPerWeek) : "",

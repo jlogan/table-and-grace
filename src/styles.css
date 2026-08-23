@@ -298,6 +298,7 @@ html {
 
 @media print {
   .admin-app [data-sidebar="sidebar"],
+  .admin-app [data-sidebar="rail"],
   .admin-app header,
   .admin-app .no-print {
     display: none !important;
@@ -315,5 +316,37 @@ html {
 
   .customer-profile-print {
     break-inside: avoid;
+    color: #000;
+  }
+
+  .customer-profile-print .customer-profile-edit {
+    display: none !important;
+  }
+
+  .customer-profile-print .customer-profile-readonly.hidden {
+    display: block !important;
+  }
+
+  .customer-profile-print input,
+  .customer-profile-print textarea,
+  .customer-profile-print select,
+  .customer-profile-print [data-slot="select-trigger"],
+  .customer-profile-print label[for] {
+    display: none !important;
+  }
+
+  .customer-profile-print .rounded-lg.border {
+    border-color: #ccc !important;
+    box-shadow: none !important;
+  }
+
+  .customer-profile-print table {
+    font-size: 11pt;
+  }
+
+  .customer-profile-print .customer-profile-header {
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #ccc;
   }
 }

@@ -1,10 +1,10 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { format, parseISO } from "date-fns";
-import { Printer } from "lucide-react";
+import { Pencil, Printer } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import type { PortionDefault } from "@/db/schema/customer-profiles";
+import type { AdminCustomerDetail } from "@/orders/admin-types";
+import { cn } from "@/lib/utils";
 import { formatDateString } from "@/lib/dates";
 import { customerFullName, customerPreferredName } from "@/lib/customer-names";
 import { formatMembershipStatus, membershipStatusBadgeVariant } from "@/orders/admin-types";
@@ -55,6 +57,20 @@ export const Route = createFileRoute("/admin/customers/$customerId")({
   component: AdminCustomerProfilePage,
 });
 
+type ProfileFormState = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  preferredName: string;
+  phone: string;
+  birthday: string;
+  favoriteCake: string;
+  portionDefault: PortionDefault;
+  dietaryTagsInput: string;
+  allergies: string;
+  chefNotes: string;
+};
+
 function formatDietaryTagsInput(tags: string[]): string {
   return tags.join(", ");
 }
@@ -71,6 +87,22 @@ function parseDietaryTagsInput(value: string): string[] {
     result.push(tag);
   }
   return result;
+}
+
+function formStateFromCustomer(customer: AdminCustomerDetail): ProfileFormState {
+  return {
+    email: customer.email,
+    firstName: customer.firstName ?? "",
+    lastName: customer.lastName ?? "",
+    preferredName: customer.preferredName ?? "",
+    phone: customer.phone ?? "",
+    birthday: customer.birthday ?? "",
+    favoriteCake: customer.favoriteCake ?? "",
+    portionDefault: customer.portionDefault,
+    dietaryTagsInput: formatDietaryTagsInput(customer.dietaryTags),
+    allergies: customer.allergies ?? "",
+    chefNotes: customer.chefNotes ?? "",
+  };
 }
 
 function initialsFromCustomer(customer: {
@@ -90,6 +122,45 @@ function initialsFromCustomer(customer: {
   return customer.email.slice(0, 2).toUpperCase();
 }
 
+function formatPortionDefault(portion: PortionDefault): string {
+  return portion === "4oz" ? "4 oz" : "6 oz";
+}
+
+function ReadOnlyField({ label, value }: { label: string; value: string | null | undefined }) {
+  const display = value?.trim() ? value : "—";
+  return (
+    <div className="space-y-1">
+      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="text-sm text-foreground">{display}</dd>
+    </div>
+  );
+}
+
+function CustomerProfileAvatar({
+  customer,
+  className,
+}: {
+  customer: AdminCustomerDetail;
+  className?: string;
+}) {
+  const initials = initialsFromCustomer(customer);
+  return (
+    <Avatar
+      className={cn(
+        "size-20 shrink-0 ring-2 ring-border ring-offset-2 ring-offset-background",
+        className,
+      )}
+    >
+      {customer.profilePhotoUrl ? (
+        <AvatarImage src={customer.profilePhotoUrl} alt="" className="object-cover" />
+      ) : null}
+      <AvatarFallback className="bg-gradient-to-br from-muted to-muted/60 text-lg font-semibold text-muted-foreground">
+        {initials}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
 function AdminCustomerProfilePage() {
   const { customer: initialCustomer } = Route.useRouteContext();
   const updateFn = useServerFn(updateAdminCustomerProfile);
@@ -97,19 +168,8 @@ function AdminCustomerProfilePage() {
   const { customerId } = Route.useParams();
 
   const [customer, setCustomer] = useState(initialCustomer);
-  const [email, setEmail] = useState(customer.email);
-  const [firstName, setFirstName] = useState(customer.firstName ?? "");
-  const [lastName, setLastName] = useState(customer.lastName ?? "");
-  const [preferredName, setPreferredName] = useState(customer.preferredName ?? "");
-  const [phone, setPhone] = useState(customer.phone ?? "");
-  const [birthday, setBirthday] = useState(customer.birthday ?? "");
-  const [favoriteCake, setFavoriteCake] = useState(customer.favoriteCake ?? "");
-  const [portionDefault, setPortionDefault] = useState<PortionDefault>(customer.portionDefault);
-  const [dietaryTagsInput, setDietaryTagsInput] = useState(
-    formatDietaryTagsInput(customer.dietaryTags),
-  );
-  const [allergies, setAllergies] = useState(customer.allergies ?? "");
-  const [chefNotes, setChefNotes] = useState(customer.chefNotes ?? "");
+  const [isEditing, setIsEditing] = useState(false);
+  const [form, setForm] = useState<ProfileFormState>(() => formStateFromCustomer(initialCustomer));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -128,6 +188,20 @@ function AdminCustomerProfilePage() {
     [customer.preferredName],
   );
 
+  function startEditing() {
+    setForm(formStateFromCustomer(customer));
+    setError(null);
+    setMessage(null);
+    setIsEditing(true);
+  }
+
+  function cancelEditing() {
+    setForm(formStateFromCustomer(customer));
+    setError(null);
+    setMessage(null);
+    setIsEditing(false);
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -137,21 +211,23 @@ function AdminCustomerProfilePage() {
       await updateFn({
         data: {
           userId: customerId,
-          email: email.trim().toLowerCase(),
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          preferredName: preferredName.trim() || null,
-          phone: phone.trim() || null,
-          birthday: birthday || null,
-          favoriteCake: favoriteCake.trim() || null,
-          portionDefault,
-          dietaryTags: parseDietaryTagsInput(dietaryTagsInput),
-          allergies: allergies.trim() || null,
-          chefNotes: chefNotes.trim() || null,
+          email: form.email.trim().toLowerCase(),
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          preferredName: form.preferredName.trim() || null,
+          phone: form.phone.trim() || null,
+          birthday: form.birthday || null,
+          favoriteCake: form.favoriteCake.trim() || null,
+          portionDefault: form.portionDefault,
+          dietaryTags: parseDietaryTagsInput(form.dietaryTagsInput),
+          allergies: form.allergies.trim() || null,
+          chefNotes: form.chefNotes.trim() || null,
         },
       });
       const next = await refreshFn({ data: { userId: customerId } });
       setCustomer(next);
+      setForm(formStateFromCustomer(next));
+      setIsEditing(false);
       setMessage("Customer updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save customer.");
@@ -160,173 +236,274 @@ function AdminCustomerProfilePage() {
     }
   }
 
-  return (
-    <div className="customer-profile-print space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <Avatar className="size-14">
-            <AvatarFallback className="text-base">{initialsFromCustomer(customer)}</AvatarFallback>
-          </Avatar>
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">
-              {displayFullName ?? customer.email}
-            </h2>
-            {displayPreferred ? (
-              <p className="text-sm text-muted-foreground">Preferred name: {displayPreferred}</p>
-            ) : null}
-            {!displayFullName && customer.name ? (
-              <p className="text-sm text-muted-foreground">Legacy name: {customer.name}</p>
-            ) : null}
-            <p className="text-sm text-muted-foreground">{customer.email}</p>
-            {customer.hasProfilePhoto ? (
-              <p className="text-xs text-muted-foreground">Profile photo on file</p>
-            ) : null}
-            <p className="text-xs text-muted-foreground">
-              Joined {format(parseISO(customer.createdAt), "MMM d, yyyy")}
-            </p>
-          </div>
+  const headerMeta = (
+    <dl className="mt-2 space-y-1 text-sm text-muted-foreground">
+      {displayPreferred ? (
+        <div>
+          <dt className="sr-only">Preferred name</dt>
+          <dd>Preferred name: {displayPreferred}</dd>
         </div>
-        <div className="flex flex-wrap gap-2 no-print">
+      ) : null}
+      <div>
+        <dt className="sr-only">Email</dt>
+        <dd>{customer.email}</dd>
+      </div>
+      <div>
+        <dt className="sr-only">Phone</dt>
+        <dd>{customer.phone?.trim() || "—"}</dd>
+      </div>
+      <div>
+        <dt className="sr-only">Birthday</dt>
+        <dd>{customer.birthday ? formatDateString(customer.birthday, "MMM d, yyyy") : "—"}</dd>
+      </div>
+      <div>
+        <dt className="sr-only">Joined</dt>
+        <dd>Joined {format(parseISO(customer.createdAt), "MMM d, yyyy")}</dd>
+      </div>
+    </dl>
+  );
+
+  const headerActions = (
+    <div className="flex flex-wrap gap-2 no-print">
+      {isEditing ? (
+        <>
+          <Button type="submit" form="customer-profile-form" disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+          <Button type="button" variant="outline" onClick={cancelEditing} disabled={saving}>
+            Cancel
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button type="button" onClick={startEditing}>
+            <Pencil className="mr-2 size-4" />
+            Edit Profile
+          </Button>
           <Button asChild>
-            <Link to="/admin/memberships">Add Membership / View Memberships</Link>
+            <Link to="/admin/memberships" search={{ userId: customerId, add: "1" }}>
+              Add Membership
+            </Link>
           </Button>
           <Button variant="outline" onClick={() => window.print()}>
             <Printer className="mr-2 size-4" />
-            Print
+            Print Profile
           </Button>
           <Button variant="outline" asChild>
-            <Link to="/admin/customers">Back to customers</Link>
+            <Link to="/admin/customers">Back to Customers</Link>
           </Button>
+        </>
+      )}
+    </div>
+  );
+
+  const editForm = (
+    <form
+      id="customer-profile-form"
+      onSubmit={handleSave}
+      className={cn("customer-profile-edit space-y-6", !isEditing && "hidden")}
+    >
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Personal Details</CardTitle>
+          <CardDescription>Identity and contact information for this customer.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="profile-email">Email</Label>
+            <Input
+              id="profile-email"
+              type="email"
+              required
+              value={form.email}
+              onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="profile-first-name">First name</Label>
+            <Input
+              id="profile-first-name"
+              value={form.firstName}
+              onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="profile-last-name">Last name</Label>
+            <Input
+              id="profile-last-name"
+              value={form.lastName}
+              onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="profile-preferred-name">Preferred name</Label>
+            <Input
+              id="profile-preferred-name"
+              value={form.preferredName}
+              onChange={(e) => setForm((prev) => ({ ...prev, preferredName: e.target.value }))}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="profile-phone">Phone</Label>
+            <Input
+              id="profile-phone"
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="profile-birthday">Birthday</Label>
+            <Input
+              id="profile-birthday"
+              type="date"
+              value={form.birthday}
+              onChange={(e) => setForm((prev) => ({ ...prev, birthday: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="profile-favorite-cake">Favorite cake</Label>
+            <Input
+              id="profile-favorite-cake"
+              value={form.favoriteCake}
+              onChange={(e) => setForm((prev) => ({ ...prev, favoriteCake: e.target.value }))}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Food Profile</CardTitle>
+          <CardDescription>Kitchen preferences for this customer.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="profile-portion">Default portion</Label>
+            <Select
+              value={form.portionDefault}
+              onValueChange={(v) =>
+                setForm((prev) => ({ ...prev, portionDefault: v as PortionDefault }))
+              }
+            >
+              <SelectTrigger id="profile-portion">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="4oz">4 oz</SelectItem>
+                <SelectItem value="6oz">6 oz</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+            <Label htmlFor="profile-dietary-tags">Dietary preferences</Label>
+            <Input
+              id="profile-dietary-tags"
+              value={form.dietaryTagsInput}
+              onChange={(e) => setForm((prev) => ({ ...prev, dietaryTagsInput: e.target.value }))}
+              placeholder="gluten-free, low-sodium"
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+            <Label htmlFor="profile-allergies">Allergies</Label>
+            <Textarea
+              id="profile-allergies"
+              value={form.allergies}
+              onChange={(e) => setForm((prev) => ({ ...prev, allergies: e.target.value }))}
+              rows={3}
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+            <Label htmlFor="profile-chef-notes">Chef notes</Label>
+            <Textarea
+              id="profile-chef-notes"
+              value={form.chefNotes}
+              onChange={(e) => setForm((prev) => ({ ...prev, chefNotes: e.target.value }))}
+              rows={8}
+            />
+          </div>
+        </CardContent>
+      </Card>
+    </form>
+  );
+
+  const readOnlySections = (
+    <div className={cn("customer-profile-readonly space-y-6", isEditing && "hidden print:block")}>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Personal Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <ReadOnlyField label="First name" value={customer.firstName} />
+            <ReadOnlyField label="Last name" value={customer.lastName} />
+            <ReadOnlyField label="Preferred name" value={customer.preferredName} />
+            <ReadOnlyField label="Email" value={customer.email} />
+            <ReadOnlyField label="Phone" value={customer.phone} />
+            <ReadOnlyField
+              label="Birthday"
+              value={customer.birthday ? formatDateString(customer.birthday, "MMM d, yyyy") : null}
+            />
+            <ReadOnlyField label="Favorite cake" value={customer.favoriteCake} />
+          </dl>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Food Profile</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1">
+            <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Dietary preferences
+            </dt>
+            <dd className="text-sm">
+              {customer.dietaryTags.length > 0 ? (
+                <ul className="flex flex-wrap gap-1.5">
+                  {customer.dietaryTags.map((tag) => (
+                    <li key={tag}>
+                      <Badge variant="secondary">{tag}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </dd>
+          </div>
+          <ReadOnlyField label="Allergies" value={customer.allergies} />
+          <ReadOnlyField label="Chef notes" value={customer.chefNotes} />
+          <ReadOnlyField
+            label="Default portion"
+            value={formatPortionDefault(customer.portionDefault)}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  return (
+    <div className="customer-profile-print space-y-6">
+      <div className="customer-profile-header flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <CustomerProfileAvatar customer={customer} />
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">
+              {displayFullName ?? customer.email}
+            </h2>
+            {headerMeta}
+          </div>
         </div>
+        {headerActions}
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+      {error ? <p className="text-sm text-destructive no-print">{error}</p> : null}
+      {message ? <p className="text-sm text-muted-foreground no-print">{message}</p> : null}
 
-      <form onSubmit={handleSave} className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Profile</CardTitle>
-            <CardDescription>Identity and kitchen preferences for this customer.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="profile-email">Email</Label>
-              <Input
-                id="profile-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-first-name">First name</Label>
-              <Input
-                id="profile-first-name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-last-name">Last name</Label>
-              <Input
-                id="profile-last-name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-preferred-name">Preferred name</Label>
-              <Input
-                id="profile-preferred-name"
-                value={preferredName}
-                onChange={(e) => setPreferredName(e.target.value)}
-                placeholder="Optional"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-phone">Phone</Label>
-              <Input
-                id="profile-phone"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-birthday">Birthday</Label>
-              <Input
-                id="profile-birthday"
-                type="date"
-                value={birthday}
-                onChange={(e) => setBirthday(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-favorite-cake">Favorite cake</Label>
-              <Input
-                id="profile-favorite-cake"
-                value={favoriteCake}
-                onChange={(e) => setFavoriteCake(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-portion">Default portion</Label>
-              <Select
-                value={portionDefault}
-                onValueChange={(v) => setPortionDefault(v as PortionDefault)}
-              >
-                <SelectTrigger id="profile-portion">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="4oz">4 oz</SelectItem>
-                  <SelectItem value="6oz">6 oz</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-              <Label htmlFor="profile-chef-notes">Chef notes</Label>
-              <Textarea
-                id="profile-chef-notes"
-                value={chefNotes}
-                onChange={(e) => setChefNotes(e.target.value)}
-                rows={8}
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="profile-dietary-tags">Dietary tags</Label>
-                <Badge variant="outline">Legacy — Phase 2B</Badge>
-              </div>
-              <Input
-                id="profile-dietary-tags"
-                value={dietaryTagsInput}
-                onChange={(e) => setDietaryTagsInput(e.target.value)}
-                placeholder="gluten-free, low-sodium"
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="profile-allergies">Allergies</Label>
-                <Badge variant="outline">Legacy — Phase 2B</Badge>
-              </div>
-              <Textarea
-                id="profile-allergies"
-                value={allergies}
-                onChange={(e) => setAllergies(e.target.value)}
-                rows={3}
-              />
-            </div>
-            <div className="no-print sm:col-span-2 lg:col-span-3">
-              <Button type="submit" disabled={saving}>
-                {saving ? "Saving…" : "Save changes"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </form>
+      {editForm}
+      {readOnlySections}
 
       <Card>
         <CardHeader>
@@ -338,7 +515,9 @@ function AdminCustomerProfilePage() {
               </CardDescription>
             </div>
             <Button variant="outline" asChild className="no-print">
-              <Link to="/admin/memberships">Add Membership / View Memberships</Link>
+              <Link to="/admin/memberships" search={{ userId: customerId, add: "1" }}>
+                Add Membership
+              </Link>
             </Button>
           </div>
         </CardHeader>
@@ -378,7 +557,12 @@ function AdminCustomerProfilePage() {
                     <TableCell>{formatPaymentSchedule(membership.paymentSchedule)}</TableCell>
                     <TableCell className="no-print">
                       <Button size="sm" variant="ghost" asChild>
-                        <Link to="/admin/memberships">View</Link>
+                        <Link
+                          to="/admin/memberships"
+                          search={{ userId: undefined, add: undefined }}
+                        >
+                          View
+                        </Link>
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -391,10 +575,8 @@ function AdminCustomerProfilePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Order history</CardTitle>
-          <CardDescription>
-            Weekly orders for this customer, including legacy orders without a membership.
-          </CardDescription>
+          <CardTitle className="text-base">Order History</CardTitle>
+          <CardDescription>Weekly order history for this customer.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
