@@ -82,6 +82,35 @@ function formStateFromCustomer(customer: AdminCustomerDetail): ProfileFormState 
   };
 }
 
+function arraysEqual<T>(a: T[], b: T[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
+
+function foodProfileFormsEqual(a: FoodProfileFormState, b: FoodProfileFormState): boolean {
+  return (
+    a.portionDefault === b.portionDefault &&
+    arraysEqual(a.dietaryPreferences, b.dietaryPreferences) &&
+    a.dietaryPreferenceOther === b.dietaryPreferenceOther &&
+    arraysEqual(a.foodAllergens, b.foodAllergens) &&
+    a.foodAllergenOther === b.foodAllergenOther &&
+    a.chefNotes === b.chefNotes
+  );
+}
+
+function profileFormsEqual(a: ProfileFormState, b: ProfileFormState): boolean {
+  return (
+    a.email === b.email &&
+    a.firstName === b.firstName &&
+    a.lastName === b.lastName &&
+    a.preferredName === b.preferredName &&
+    a.phone === b.phone &&
+    a.birthday === b.birthday &&
+    a.favoriteCake === b.favoriteCake &&
+    foodProfileFormsEqual(a.foodProfile, b.foodProfile)
+  );
+}
+
 function initialsFromCustomer(customer: {
   firstName: string | null;
   lastName: string | null;
@@ -161,6 +190,10 @@ function AdminCustomerProfilePage() {
     [customer.preferredName],
   );
 
+  const savedForm = useMemo(() => formStateFromCustomer(customer), [customer]);
+
+  const isDirty = useMemo(() => !profileFormsEqual(form, savedForm), [form, savedForm]);
+
   function startEditing() {
     setForm(formStateFromCustomer(customer));
     setError(null);
@@ -175,8 +208,20 @@ function AdminCustomerProfilePage() {
     setIsEditing(false);
   }
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
+  function preventEnterSubmitInProfileFields(e: React.KeyboardEvent<HTMLFormElement>) {
+    if (e.key !== "Enter") return;
+    if (!(e.target instanceof HTMLInputElement)) return;
+    const type = e.target.type.toLowerCase();
+    if (type === "text" || type === "email" || type === "tel" || type === "date") {
+      e.preventDefault();
+    }
+  }
+
+  async function handleSave(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!isEditing || !isDirty) {
+      return;
+    }
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -246,7 +291,7 @@ function AdminCustomerProfilePage() {
     <div className="flex flex-wrap gap-2 no-print">
       {isEditing ? (
         <>
-          <Button type="submit" form="customer-profile-form" disabled={saving}>
+          <Button type="button" disabled={saving || !isDirty} onClick={() => void handleSave()}>
             {saving ? "Saving…" : "Save"}
           </Button>
           <Button type="button" variant="outline" onClick={cancelEditing} disabled={saving}>
@@ -279,7 +324,10 @@ function AdminCustomerProfilePage() {
   const editForm = (
     <form
       id="customer-profile-form"
-      onSubmit={handleSave}
+      onSubmit={(e) => {
+        e.preventDefault();
+      }}
+      onKeyDown={preventEnterSubmitInProfileFields}
       className={cn("customer-profile-edit space-y-6", !isEditing && "hidden")}
     >
       <Card>
