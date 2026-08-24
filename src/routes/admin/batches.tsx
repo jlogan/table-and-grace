@@ -142,6 +142,18 @@ function AdminBatchesPage() {
     () => new Map(menuItems.map((item) => [item.id, item.name])),
     [menuItems],
   );
+  const plannedTotalMeals = useMemo(
+    () => Object.values(inventoryDraft).reduce((sum, qty) => sum + qty, 0),
+    [inventoryDraft],
+  );
+  const planningMealsDelta = plannedTotalMeals - projectedTotalMeals;
+  const planningStatusText =
+    planningMealsDelta < 0
+      ? `${Math.abs(planningMealsDelta)} still to plan`
+      : planningMealsDelta === 0
+        ? "Fully planned"
+        : `${planningMealsDelta} over plan`;
+  const hideRemainingColumn = selectedBatch?.status === "planning";
   const selectedWeeklyMenuRows = useMemo(() => {
     return Object.entries(inventoryDraft)
       .filter(([, qty]) => qty > 0)
@@ -593,16 +605,37 @@ function AdminBatchesPage() {
                 <CardTitle className="text-base">Meals needed this batch</CardTitle>
                 <CardDescription>
                   {showProjectedDemand
-                    ? "Projected demand vs planned quantity (before publish)"
+                    ? "Planning indicator — compares total eligible membership meals to your planned quantities. Per-meal counts are not confirmed customer demand."
                     : "Actual order-line demand vs planned quantity (after publish)"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {mealDemand.filter((r) => r.qtyNeeded > 0 || r.qtyCooked > 0).length === 0 ? (
+                {showProjectedDemand ? (
+                  <>
+                    <div className="grid gap-2 text-sm sm:grid-cols-3">
+                      <div className="rounded-md border border-border px-3 py-2">
+                        <p className="text-muted-foreground">Projected demand</p>
+                        <p className="font-medium tabular-nums">{projectedTotalMeals}</p>
+                      </div>
+                      <div className="rounded-md border border-border px-3 py-2">
+                        <p className="text-muted-foreground">Planned</p>
+                        <p className="font-medium tabular-nums">{plannedTotalMeals}</p>
+                      </div>
+                      <div className="rounded-md border border-border px-3 py-2">
+                        <p className="text-muted-foreground">Status</p>
+                        <p className="font-medium">{planningStatusText}</p>
+                      </div>
+                    </div>
+                    {eligibleCount === 0 ? (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        No eligible active members — projected demand is 0 until memberships are
+                        active.
+                      </p>
+                    ) : null}
+                  </>
+                ) : mealDemand.filter((r) => r.qtyNeeded > 0 || r.qtyCooked > 0).length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    {showProjectedDemand
-                      ? "Save planned quantities and add eligible active members to see projected meal totals."
-                      : "No meal demand recorded for this batch yet."}
+                    No meal demand recorded for this batch yet.
                   </p>
                 ) : (
                   <ul className="space-y-2 text-sm">
@@ -615,8 +648,7 @@ function AdminBatchesPage() {
                           <li key={row.menuItemId} className="flex justify-between gap-4">
                             <span className="truncate">{row.menuItemName}</span>
                             <span className="shrink-0 tabular-nums text-muted-foreground">
-                              {showProjectedDemand ? "projected" : "need"} {row.qtyNeeded} / planned{" "}
-                              {row.qtyCooked}
+                              need {row.qtyNeeded} / planned {row.qtyCooked}
                               {shortage > 0 ? ` · short ${shortage}` : ""}
                             </span>
                           </li>
@@ -687,7 +719,9 @@ function AdminBatchesPage() {
                       <TableRow>
                         <TableHead>Menu item</TableHead>
                         <TableHead className="w-[140px] text-right">Planned quantity</TableHead>
-                        <TableHead className="w-[120px] text-right">Remaining</TableHead>
+                        {!hideRemainingColumn ? (
+                          <TableHead className="w-[120px] text-right">Remaining</TableHead>
+                        ) : null}
                         {canEditInventory ? <TableHead className="w-[56px]" /> : null}
                       </TableRow>
                     </TableHeader>
@@ -712,9 +746,11 @@ function AdminBatchesPage() {
                               }}
                             />
                           </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {row.qtyRemaining}
-                          </TableCell>
+                          {!hideRemainingColumn ? (
+                            <TableCell className="text-right tabular-nums">
+                              {row.qtyRemaining}
+                            </TableCell>
+                          ) : null}
                           {canEditInventory ? (
                             <TableCell className="text-right">
                               <Button
