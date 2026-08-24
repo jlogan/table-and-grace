@@ -1,14 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { z } from "zod";
 
 import { requireRoleMiddleware } from "@/auth/middleware.server";
 import { listPublishEligibleMembers, type PublishEligibility } from "@/db/batches.server";
 import { getBatchProjectedMealDemand } from "@/db/customers.server";
 
+import { WeeklyMenuPicker } from "@/components/admin/weekly-menu-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,9 +30,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDateString } from "@/lib/dates";
+import { formatDateString, getUpcomingWeekStarts, weekStartMonday } from "@/lib/dates";
 import {
   createAdminWeeklyBatch,
+  fetchActiveMenuItemsForAdmin,
   fetchAdminBatches,
   fetchAdminPickupWindows,
   fetchBatchInventory,
@@ -62,13 +64,22 @@ const fetchBatchPublishEligibility = createServerFn({ method: "GET" })
 
 type PageMode = "list" | "create" | "detail";
 
+function formatPortionLabel(portion: "4oz" | "6oz"): string {
+  return portion === "4oz" ? "4 oz" : "6 oz";
+}
+
+function formatWeekOfLabel(weekStart: string): string {
+  return `Week of ${formatDateString(weekStart, "MMM d, yyyy")}`;
+}
+
 export const Route = createFileRoute("/admin/batches")({
   beforeLoad: async () => {
-    const [batches, pickupWindows] = await Promise.all([
+    const [batches, pickupWindows, menuItems] = await Promise.all([
       fetchAdminBatches(),
       fetchAdminPickupWindows(),
+      fetchActiveMenuItemsForAdmin(),
     ]);
-    return { batches, pickupWindows };
+    return { batches, pickupWindows, menuItems };
   },
   head: () => ({
     meta: [{ title: "Batches — GOFOFA Ops" }],
@@ -77,7 +88,7 @@ export const Route = createFileRoute("/admin/batches")({
 });
 
 function AdminBatchesPage() {
-  const { batches: initialBatches, pickupWindows } = Route.useRouteContext();
+  const { batches: initialBatches, pickupWindows, menuItems } = Route.useRouteContext();
   const createFn = useServerFn(createAdminWeeklyBatch);
   const inventoryFn = useServerFn(fetchBatchInventory);
   const saveInventoryFn = useServerFn(saveAdminBatchInventory);
@@ -95,6 +106,9 @@ function AdminBatchesPage() {
   const [publishEligibility, setPublishEligibility] = useState<PublishEligibility | null>(null);
   const [inventoryDraft, setInventoryDraft] = useState<Record<string, number>>({});
   const [pickupWindowId, setPickupWindowId] = useState(pickupWindows[0]?.id ?? "");
+  const [weekStart, setWeekStart] = useState(
+    () => getUpcomingWeekStarts(12)[0] ?? weekStartMonday().toISOString().slice(0, 10),
+  );
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -113,12 +127,46 @@ function AdminBatchesPage() {
   const excludedInactiveCount = publishEligibility?.excludedInactiveCount ?? 0;
   const unresolvedMembers = publishEligibility?.unresolved ?? [];
   const projectedTotalMeals = eligibleMembers.reduce((sum, member) => sum + member.mealsPerWeek, 0);
+  const projected4ozMeals = eligibleMembers
+    .filter((member) => member.portionDefault === "4oz")
+    .reduce((sum, member) => sum + member.mealsPerWeek, 0);
+  const projected6ozMeals = eligibleMembers
+    .filter((member) => member.portionDefault === "6oz")
+    .reduce((sum, member) => sum + member.mealsPerWeek, 0);
+  const existingWeekStarts = useMemo(
+    () => new Set(batches.map((batch) => batch.weekStart)),
+    [batches],
+  );
+  const weekStartOptions = useMemo(() => getUpcomingWeekStarts(12), []);
+  const menuItemNameById = useMemo(
+    () => new Map(menuItems.map((item) => [item.id, item.name])),
+    [menuItems],
+  );
+  const selectedWeeklyMenuRows = useMemo(() => {
+    return Object.entries(inventoryDraft)
+      .filter(([, qty]) => qty > 0)
+      .map(([menuItemId, qty]) => {
+        const inventoryRow = inventory.find((row) => row.menuItemId === menuItemId);
+        return {
+          menuItemId,
+          menuItemName:
+            inventoryRow?.menuItemName ?? menuItemNameById.get(menuItemId) ?? "Unknown item",
+          qtyPlanned: qty,
+          qtyRemaining: inventoryRow?.qtyRemaining ?? qty,
+        };
+      })
+      .sort((a, b) => a.menuItemName.localeCompare(b.menuItemName));
+  }, [inventory, inventoryDraft, menuItemNameById]);
+  const selectedMenuItemIds = useMemo(
+    () => new Set(selectedWeeklyMenuRows.map((row) => row.menuItemId)),
+    [selectedWeeklyMenuRows],
+  );
   const publishBlockReasons: string[] = [];
   if (!canEditInventory) {
     publishBlockReasons.push("Batch is not in planning or draft.");
   }
   if (savedInventoryCount === 0) {
-    publishBlockReasons.push("Save batch inventory with at least one item before publishing.");
+    publishBlockReasons.push("Save planned quantities for at least one meal before publishing.");
   }
   if (eligibleCount === 0) {
     publishBlockReasons.push("No active memberships are eligible for this batch.");
@@ -149,7 +197,11 @@ function AdminBatchesPage() {
         isPrePublish ? publishEligibilityFn() : Promise.resolve(null),
       ]);
       setInventory(rows);
-      setInventoryDraft(Object.fromEntries(rows.map((r) => [r.menuItemId, r.qtyCooked])));
+      setInventoryDraft(
+        Object.fromEntries(
+          rows.filter((row) => row.qtyCooked > 0).map((row) => [row.menuItemId, row.qtyCooked]),
+        ),
+      );
       setMealDemand(demand);
       setPublishEligibility(eligibility);
     } catch (e) {
@@ -184,6 +236,7 @@ function AdminBatchesPage() {
     try {
       const result = await createFn({
         data: {
+          weekStart,
           pickupWindowId: pickupWindowId || undefined,
         },
       });
@@ -206,18 +259,28 @@ function AdminBatchesPage() {
     setError(null);
     setMessage(null);
     try {
-      const items = Object.entries(inventoryDraft).map(([menuItemId, qtyCooked]) => ({
-        menuItemId,
-        qtyCooked,
-      }));
+      const removedItems = inventory
+        .filter(
+          (row) =>
+            row.batchItemId && row.qtyCooked > 0 && (inventoryDraft[row.menuItemId] ?? 0) === 0,
+        )
+        .map((row) => ({ menuItemId: row.menuItemId, qtyCooked: 0 }));
+      const plannedItems = Object.entries(inventoryDraft)
+        .filter(([, qtyCooked]) => qtyCooked > 0)
+        .map(([menuItemId, qtyCooked]) => ({ menuItemId, qtyCooked }));
+      const items = [...plannedItems, ...removedItems];
       const rows = await saveInventoryFn({ data: { batchId: selectedBatchId, items } });
       setInventory(rows);
-      setInventoryDraft(Object.fromEntries(rows.map((r) => [r.menuItemId, r.qtyCooked])));
+      setInventoryDraft(
+        Object.fromEntries(
+          rows.filter((row) => row.qtyCooked > 0).map((row) => [row.menuItemId, row.qtyCooked]),
+        ),
+      );
       await refreshBatches();
       if (selectedBatch) {
         await loadInventory(selectedBatchId, selectedBatch.status);
       }
-      setMessage("Inventory saved.");
+      setMessage("Planned quantities saved.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save inventory.");
     } finally {
@@ -252,8 +315,8 @@ function AdminBatchesPage() {
             {mode === "list"
               ? "Select a batch to manage inventory and publish, or create a new batch date."
               : mode === "create"
-                ? "Opens a planning batch for today's batch date."
-                : "Set menu inventory, review member demand, then publish for customer review."}
+                ? "Choose the batch week, pickup window, and open a planning batch."
+                : "Choose weekly menu meals, set planned quantities, review member demand, then publish for customer review."}
           </p>
         </div>
         {mode === "list" ? (
@@ -274,11 +337,29 @@ function AdminBatchesPage() {
           <CardHeader>
             <CardTitle className="text-base">Create batch</CardTitle>
             <CardDescription>
-              Opens a planning batch for today's batch date. Pickup/delivery date controls are
-              coming in the next batch-planning pass.
+              Opens a planning batch for the selected week. Each week can have only one batch.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-end gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="week-start">Week of</Label>
+              <Select value={weekStart} onValueChange={setWeekStart}>
+                <SelectTrigger id="week-start" className="w-[260px]">
+                  <SelectValue placeholder="Select week" />
+                </SelectTrigger>
+                <SelectContent>
+                  {weekStartOptions.map((option) => {
+                    const taken = existingWeekStarts.has(option);
+                    return (
+                      <SelectItem key={option} value={option} disabled={taken}>
+                        {formatWeekOfLabel(option)}
+                        {taken ? " (batch exists)" : ""}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
             {pickupWindows.length > 0 ? (
               <div className="space-y-2">
                 <Label htmlFor="pickup-window">Pickup / delivery window</Label>
@@ -296,7 +377,10 @@ function AdminBatchesPage() {
                 </Select>
               </div>
             ) : null}
-            <Button onClick={handleCreateBatch} disabled={creating}>
+            <Button
+              onClick={handleCreateBatch}
+              disabled={creating || existingWeekStarts.has(weekStart)}
+            >
               {creating ? "Creating…" : "Create batch"}
             </Button>
           </CardContent>
@@ -384,7 +468,7 @@ function AdminBatchesPage() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <CardTitle className="text-base">
-                    Batch date {formatDateString(selectedBatch.weekStart, "MMM d, yyyy")}
+                    {formatWeekOfLabel(selectedBatch.weekStart)}
                   </CardTitle>
                   <CardDescription className="flex flex-wrap items-center gap-2 pt-1">
                     <Badge variant={batchStatusBadgeVariant(selectedBatch.status)}>
@@ -417,8 +501,7 @@ function AdminBatchesPage() {
               <CardHeader>
                 <CardTitle className="text-base">Eligible memberships</CardTitle>
                 <CardDescription>
-                  {eligibleCount} active membership{eligibleCount === 1 ? "" : "s"} will receive
-                  orders when you publish
+                  Active memberships that will receive orders when you publish
                   {excludedInactiveCount > 0
                     ? ` · ${excludedInactiveCount} paused or cancelled excluded`
                     : ""}
@@ -439,40 +522,56 @@ function AdminBatchesPage() {
                   </p>
                 ) : (
                   <>
-                    <p className="mb-3 text-sm text-muted-foreground">
-                      Projected total meal demand:{" "}
-                      <span className="font-medium text-foreground tabular-nums">
-                        {projectedTotalMeals}
-                      </span>
-                    </p>
-                    <ul className="space-y-3 text-sm">
-                      {eligibleMembers.slice(0, 6).map((member) => {
-                        const label = member.name?.trim() || member.email;
-                        return (
-                          <li
-                            key={member.membershipId}
-                            className="border-b border-border pb-2 last:border-0"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="font-medium">{label}</span>
-                              <Badge variant="default">Active</Badge>
-                            </div>
-                            <p className="mt-1 text-muted-foreground">
-                              {member.planName ? <>{member.planName} · </> : null}
-                              {member.mealsPerWeek} meal{member.mealsPerWeek === 1 ? "" : "s"}/wk
-                              {" · "}
-                              {member.portionDefault} portion
-                            </p>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    {eligibleCount > 6 ? (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        + {eligibleCount - 6} more eligible membership
-                        {eligibleCount - 6 === 1 ? "" : "s"}
-                      </p>
-                    ) : null}
+                    <div className="mb-4 grid gap-2 text-sm sm:grid-cols-3">
+                      <div className="rounded-md border border-border px-3 py-2">
+                        <p className="text-muted-foreground">Total meals</p>
+                        <p className="font-medium tabular-nums">{projectedTotalMeals}</p>
+                      </div>
+                      <div className="rounded-md border border-border px-3 py-2">
+                        <p className="text-muted-foreground">4 oz portions</p>
+                        <p className="font-medium tabular-nums">{projected4ozMeals}</p>
+                      </div>
+                      <div className="rounded-md border border-border px-3 py-2">
+                        <p className="text-muted-foreground">6 oz portions</p>
+                        <p className="font-medium tabular-nums">{projected6ozMeals}</p>
+                      </div>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Member</TableHead>
+                          <TableHead>Plan</TableHead>
+                          <TableHead className="text-right">Meals/wk</TableHead>
+                          <TableHead>Portion</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {eligibleMembers.map((member) => {
+                          const label = member.name?.trim() || member.email;
+                          return (
+                            <TableRow key={member.membershipId}>
+                              <TableCell>
+                                <div className="font-medium">{label}</div>
+                                {member.name?.trim() ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    {member.email}
+                                  </div>
+                                ) : null}
+                              </TableCell>
+                              <TableCell>{member.planName ?? "—"}</TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {member.mealsPerWeek}
+                              </TableCell>
+                              <TableCell>{formatPortionLabel(member.portionDefault)}</TableCell>
+                              <TableCell>
+                                <Badge variant="default">Eligible</Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
                   </>
                 )}
                 {unresolvedMembers.length > 0 ? (
@@ -494,15 +593,15 @@ function AdminBatchesPage() {
                 <CardTitle className="text-base">Meals needed this batch</CardTitle>
                 <CardDescription>
                   {showProjectedDemand
-                    ? "Projected demand vs cooked inventory (before publish)"
-                    : "Actual order-line demand vs cooked inventory (after publish)"}
+                    ? "Projected demand vs planned quantity (before publish)"
+                    : "Actual order-line demand vs planned quantity (after publish)"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {mealDemand.filter((r) => r.qtyNeeded > 0 || r.qtyCooked > 0).length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     {showProjectedDemand
-                      ? "Save inventory and add eligible active members to see projected meal totals."
+                      ? "Save planned quantities and add eligible active members to see projected meal totals."
                       : "No meal demand recorded for this batch yet."}
                   </p>
                 ) : (
@@ -516,7 +615,7 @@ function AdminBatchesPage() {
                           <li key={row.menuItemId} className="flex justify-between gap-4">
                             <span className="truncate">{row.menuItemName}</span>
                             <span className="shrink-0 tabular-nums text-muted-foreground">
-                              {showProjectedDemand ? "projected" : "need"} {row.qtyNeeded} / cooked{" "}
+                              {showProjectedDemand ? "projected" : "need"} {row.qtyNeeded} / planned{" "}
                               {row.qtyCooked}
                               {shortage > 0 ? ` · short ${shortage}` : ""}
                             </span>
@@ -533,9 +632,10 @@ function AdminBatchesPage() {
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <CardTitle className="text-base">Batch inventory</CardTitle>
+                  <CardTitle className="text-base">Weekly menu</CardTitle>
                   <CardDescription>
-                    Set cooked quantities from the active menu catalog.
+                    Search the active catalog to choose meals for this batch, then set planned
+                    quantities.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -544,7 +644,7 @@ function AdminBatchesPage() {
                     onClick={handleSaveInventory}
                     disabled={!canEditInventory || saving || loadingInventory}
                   >
-                    {saving ? "Saving…" : "Save inventory"}
+                    {saving ? "Saving…" : "Save planned quantities"}
                   </Button>
                   <Button onClick={handlePublish} disabled={!canPublish || publishing}>
                     {publishing ? "Publishing…" : "Publish for review"}
@@ -555,45 +655,89 @@ function AdminBatchesPage() {
                 <p className="text-sm text-muted-foreground">{publishBlockReasons.join(" ")}</p>
               ) : null}
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="space-y-4">
+              {canEditInventory ? (
+                <WeeklyMenuPicker
+                  menuItems={menuItems}
+                  selectedMenuItemIds={selectedMenuItemIds}
+                  disabled={loadingInventory}
+                  onSelect={(menuItemId) =>
+                    setInventoryDraft((prev) => ({
+                      ...prev,
+                      [menuItemId]: (prev[menuItemId] ?? 0) > 0 ? prev[menuItemId]! : 1,
+                    }))
+                  }
+                />
+              ) : null}
               {loadingInventory ? (
-                <p className="p-4 text-sm text-muted-foreground">Loading inventory…</p>
+                <p className="text-sm text-muted-foreground">Loading weekly menu…</p>
+              ) : selectedWeeklyMenuRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {canEditInventory
+                    ? "No meals selected yet — search the active menu to build this week's offering."
+                    : "No planned meals saved for this batch."}
+                </p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Menu item</TableHead>
-                      <TableHead className="w-[120px] text-right">Qty cooked</TableHead>
-                      <TableHead className="w-[120px] text-right">Remaining</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {inventory.map((row) => (
-                      <TableRow key={row.menuItemId}>
-                        <TableCell>{row.menuItemName}</TableCell>
-                        <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            min={0}
-                            max={999}
-                            className="ml-auto w-20 text-right tabular-nums"
-                            disabled={!canEditInventory}
-                            value={inventoryDraft[row.menuItemId] ?? 0}
-                            onChange={(e) =>
-                              setInventoryDraft((prev) => ({
-                                ...prev,
-                                [row.menuItemId]: Number(e.target.value) || 0,
-                              }))
-                            }
-                          />
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {row.qtyRemaining}
-                        </TableCell>
+                <div>
+                  <p className="mb-3 text-sm font-medium">
+                    Selected weekly meals ({selectedWeeklyMenuRows.length})
+                  </p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Menu item</TableHead>
+                        <TableHead className="w-[140px] text-right">Planned quantity</TableHead>
+                        <TableHead className="w-[120px] text-right">Remaining</TableHead>
+                        {canEditInventory ? <TableHead className="w-[56px]" /> : null}
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedWeeklyMenuRows.map((row) => (
+                        <TableRow key={row.menuItemId}>
+                          <TableCell>{row.menuItemName}</TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={999}
+                              className="ml-auto w-24 text-right tabular-nums"
+                              disabled={!canEditInventory}
+                              value={inventoryDraft[row.menuItemId] ?? 0}
+                              onChange={(e) => {
+                                const qty = Number(e.target.value) || 0;
+                                setInventoryDraft((prev) => ({
+                                  ...prev,
+                                  [row.menuItemId]: qty,
+                                }));
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {row.qtyRemaining}
+                          </TableCell>
+                          {canEditInventory ? (
+                            <TableCell className="text-right">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Remove ${row.menuItemName}`}
+                                onClick={() =>
+                                  setInventoryDraft((prev) => ({
+                                    ...prev,
+                                    [row.menuItemId]: 0,
+                                  }))
+                                }
+                              >
+                                <X className="size-4" />
+                              </Button>
+                            </TableCell>
+                          ) : null}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </CardContent>
           </Card>

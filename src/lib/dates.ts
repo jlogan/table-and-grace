@@ -29,6 +29,31 @@ function parseDateValue(value: string): Date | null {
   return isValid(parsed) ? parsed : null;
 }
 
+/** Monday 12:00 local for the week containing `base` (batch week anchor). */
+export function weekStartMonday(base = new Date()): Date {
+  const d = new Date(base);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(12, 0, 0, 0);
+  return d;
+}
+
+export function addDaysToDate(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+/** ISO Monday dates for upcoming batch weeks, starting with the current week. */
+export function getUpcomingWeekStarts(count = 12): string[] {
+  const start = weekStartMonday();
+  return Array.from({ length: count }, (_, index) => {
+    const week = addDaysToDate(start, index * 7);
+    return toIsoDateString(week) ?? week.toISOString().slice(0, 10);
+  });
+}
+
 /** Format ISO date or datetime strings without throwing on invalid input. */
 export function formatDateString(
   value: string | null | undefined,
