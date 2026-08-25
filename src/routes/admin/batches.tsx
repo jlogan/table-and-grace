@@ -16,13 +16,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -30,12 +23,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDateString, getUpcomingWeekStarts, weekStartMonday } from "@/lib/dates";
+import { formatDateString } from "@/lib/dates";
 import {
   createAdminWeeklyBatch,
   fetchActiveMenuItemsForAdmin,
   fetchAdminBatches,
-  fetchAdminPickupWindows,
   fetchBatchInventory,
   fetchBatchMealDemand,
   openAdminMenuForSelection,
@@ -74,22 +66,29 @@ function defaultSelectionDeadlineLocal(): string {
   return d.toISOString().slice(0, 16);
 }
 
+function todayIsoDate(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+
+function addDaysToIsoDate(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function localDatetimeToIso(value: string): string {
   return new Date(value).toISOString();
 }
 
-function formatWeekOfLabel(weekStart: string): string {
-  return `Week of ${formatDateString(weekStart, "MMM d, yyyy")}`;
-}
-
 export const Route = createFileRoute("/admin/batches")({
   beforeLoad: async () => {
-    const [batches, pickupWindows, menuItems] = await Promise.all([
+    const [batches, menuItems] = await Promise.all([
       fetchAdminBatches(),
-      fetchAdminPickupWindows(),
       fetchActiveMenuItemsForAdmin(),
     ]);
-    return { batches, pickupWindows, menuItems };
+    return { batches, menuItems };
   },
   head: () => ({
     meta: [{ title: "Batches — GOFOFA Ops" }],
@@ -98,7 +97,7 @@ export const Route = createFileRoute("/admin/batches")({
 });
 
 function AdminBatchesPage() {
-  const { batches: initialBatches, pickupWindows, menuItems } = Route.useRouteContext();
+  const { batches: initialBatches, menuItems } = Route.useRouteContext();
   const createFn = useServerFn(createAdminWeeklyBatch);
   const inventoryFn = useServerFn(fetchBatchInventory);
   const saveInventoryFn = useServerFn(saveAdminBatchInventory);
@@ -115,10 +114,11 @@ function AdminBatchesPage() {
   const [mealDemand, setMealDemand] = useState<BatchMealDemandRow[]>([]);
   const [publishEligibility, setPublishEligibility] = useState<PublishEligibility | null>(null);
   const [inventoryDraft, setInventoryDraft] = useState<Record<string, number>>({});
-  const [pickupWindowId, setPickupWindowId] = useState(pickupWindows[0]?.id ?? "");
-  const [weekStart, setWeekStart] = useState(
-    () => getUpcomingWeekStarts(12)[0] ?? weekStartMonday().toISOString().slice(0, 10),
+  const [createBatchDate, setCreateBatchDate] = useState(todayIsoDate);
+  const [createPickupDate, setCreatePickupDate] = useState(() =>
+    addDaysToIsoDate(todayIsoDate(), 6),
   );
+  const [createInventoryDraft, setCreateInventoryDraft] = useState<Record<string, number>>({});
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -146,11 +146,10 @@ function AdminBatchesPage() {
   const projected6ozMeals = eligibleMembers
     .filter((member) => member.portionDefault === "6oz")
     .reduce((sum, member) => sum + member.mealsPerWeek, 0);
-  const existingWeekStarts = useMemo(
+  const existingBatchDates = useMemo(
     () => new Set(batches.map((batch) => batch.weekStart)),
     [batches],
   );
-  const weekStartOptions = useMemo(() => getUpcomingWeekStarts(12), []);
   const menuItemNameById = useMemo(
     () => new Map(menuItems.map((item) => [item.id, item.name])),
     [menuItems],
@@ -167,6 +166,24 @@ function AdminBatchesPage() {
         ? "Fully planned"
         : `${planningMealsDelta} over plan`;
   const hideRemainingColumn = selectedBatch?.status === "planning";
+  const createSelectedRows = useMemo(() => {
+    return Object.entries(createInventoryDraft)
+      .filter(([, qty]) => qty > 0)
+      .map(([menuItemId, qty]) => ({
+        menuItemId,
+        menuItemName: menuItemNameById.get(menuItemId) ?? "Unknown item",
+        qtyPlanned: qty,
+      }))
+      .sort((a, b) => a.menuItemName.localeCompare(b.menuItemName));
+  }, [createInventoryDraft, menuItemNameById]);
+  const createSelectedMenuItemIds = useMemo(
+    () => new Set(createSelectedRows.map((row) => row.menuItemId)),
+    [createSelectedRows],
+  );
+  const canCreateBatch =
+    Boolean(createBatchDate && createPickupDate) &&
+    createSelectedRows.length > 0 &&
+    !existingBatchDates.has(createBatchDate);
   const selectedWeeklyMenuRows = useMemo(() => {
     return Object.entries(inventoryDraft)
       .filter(([, qty]) => qty > 0)
@@ -192,7 +209,7 @@ function AdminBatchesPage() {
   }
   if (savedInventoryCount === 0) {
     openMenuBlockReasons.push(
-      "Save planned quantities for at least one meal before opening selection.",
+      "Save planned quantities for at least one item before sending to members for selection.",
     );
   }
   if (eligibleCount === 0) {
@@ -253,15 +270,30 @@ function AdminBatchesPage() {
     setMessage(null);
   }
 
+  function startCreateMode() {
+    setMode("create");
+    setCreateBatchDate(todayIsoDate());
+    setCreatePickupDate(addDaysToIsoDate(todayIsoDate(), 6));
+    setCreateInventoryDraft({});
+    setError(null);
+    setMessage(null);
+  }
+
   async function handleCreateBatch() {
+    if (!canCreateBatch) return;
     setCreating(true);
     setError(null);
     setMessage(null);
     try {
+      const items = createSelectedRows.map((row) => ({
+        menuItemId: row.menuItemId,
+        qtyCooked: row.qtyPlanned,
+      }));
       const result = await createFn({
         data: {
-          weekStart,
-          pickupWindowId: pickupWindowId || undefined,
+          batchDate: createBatchDate,
+          pickupDate: createPickupDate,
+          items,
         },
       });
       const next = await refreshBatches();
@@ -269,7 +301,7 @@ function AdminBatchesPage() {
       if (created) {
         await openBatchDetail(created);
       }
-      setMessage("Weekly batch created.");
+      setMessage("Batch created.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create batch.");
     } finally {
@@ -327,9 +359,9 @@ function AdminBatchesPage() {
       const next = await refreshBatches();
       const updated = next.find((b) => b.id === selectedBatchId);
       await loadInventory(selectedBatchId, updated?.status);
-      setMessage(`Open menu for selection — ${result.ordersCreated} empty order(s) created.`);
+      setMessage(`Send to members for selection — ${result.ordersCreated} empty order(s) created.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not open menu for selection.");
+      setError(e instanceof Error ? e.message : "Could not send batch to members for selection.");
     } finally {
       setOpeningMenu(false);
     }
@@ -342,14 +374,14 @@ function AdminBatchesPage() {
           <h2 className="text-lg font-semibold tracking-tight text-foreground">Weekly batches</h2>
           <p className="text-sm text-muted-foreground">
             {mode === "list"
-              ? "Select a batch to manage inventory, open selection, or create a new batch date."
+              ? "Select a batch to manage items, send to members for selection, or create a new batch."
               : mode === "create"
-                ? "Choose the batch week, pickup window, and open a planning batch."
-                : "Choose weekly menu meals, set planned quantities, then open the menu for customer selection."}
+                ? "Set batch and pickup dates, choose items and quantities, then create the batch."
+                : "Choose batch items, set planned quantities, then send to members for selection."}
           </p>
         </div>
         {mode === "list" ? (
-          <Button onClick={() => setMode("create")}>Create new batch</Button>
+          <Button onClick={startCreateMode}>Create new batch</Button>
         ) : (
           <Button variant="outline" onClick={backToList}>
             <ArrowLeft className="size-4" />
@@ -366,52 +398,139 @@ function AdminBatchesPage() {
           <CardHeader>
             <CardTitle className="text-base">Create batch</CardTitle>
             <CardDescription>
-              Opens a planning batch for the selected week. Each week can have only one batch.
+              Set the batch date and pickup date, then add items with planned quantities. Each batch
+              date can have only one batch.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap items-end gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="week-start">Week of</Label>
-              <Select value={weekStart} onValueChange={setWeekStart}>
-                <SelectTrigger id="week-start" className="w-[260px]">
-                  <SelectValue placeholder="Select week" />
-                </SelectTrigger>
-                <SelectContent>
-                  {weekStartOptions.map((option) => {
-                    const taken = existingWeekStarts.has(option);
-                    return (
-                      <SelectItem key={option} value={option} disabled={taken}>
-                        {formatWeekOfLabel(option)}
-                        {taken ? " (batch exists)" : ""}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-            {pickupWindows.length > 0 ? (
+          <CardContent className="space-y-6">
+            <div className="flex flex-wrap items-end gap-4">
               <div className="space-y-2">
-                <Label htmlFor="pickup-window">Pickup / delivery window</Label>
-                <Select value={pickupWindowId} onValueChange={setPickupWindowId}>
-                  <SelectTrigger id="pickup-window" className="w-[240px]">
-                    <SelectValue placeholder="Select pickup window" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pickupWindows.map((pw) => (
-                      <SelectItem key={pw.id} value={pw.id}>
-                        {pw.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="batch-date">Batch date</Label>
+                <Input
+                  id="batch-date"
+                  type="date"
+                  className="w-[200px]"
+                  value={createBatchDate}
+                  onChange={(e) => {
+                    const nextBatchDate = e.target.value;
+                    setCreateBatchDate(nextBatchDate);
+                    if (nextBatchDate && createPickupDate && createPickupDate < nextBatchDate) {
+                      setCreatePickupDate(nextBatchDate);
+                    }
+                  }}
+                />
               </div>
-            ) : null}
-            <Button
-              onClick={handleCreateBatch}
-              disabled={creating || existingWeekStarts.has(weekStart)}
-            >
-              {creating ? "Creating…" : "Create batch"}
-            </Button>
+              <div className="space-y-2">
+                <Label htmlFor="pickup-date">Pickup date</Label>
+                <Input
+                  id="pickup-date"
+                  type="date"
+                  className="w-[200px]"
+                  min={createBatchDate || undefined}
+                  value={createPickupDate}
+                  onChange={(e) => setCreatePickupDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium">Items in this batch</p>
+                <p className="text-sm text-muted-foreground">
+                  Search the active catalog to choose meals and set planned quantities before
+                  creating the batch.
+                </p>
+              </div>
+              <WeeklyMenuPicker
+                menuItems={menuItems}
+                selectedMenuItemIds={createSelectedMenuItemIds}
+                onSelect={(menuItemId) =>
+                  setCreateInventoryDraft((prev) => ({
+                    ...prev,
+                    [menuItemId]: (prev[menuItemId] ?? 0) > 0 ? prev[menuItemId]! : 1,
+                  }))
+                }
+              />
+              {createSelectedRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No items selected yet — search the active menu to build this batch.
+                </p>
+              ) : (
+                <div>
+                  <p className="mb-3 text-sm font-medium">
+                    Selected items ({createSelectedRows.length})
+                  </p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Menu item</TableHead>
+                        <TableHead className="w-[140px] text-right">Planned quantity</TableHead>
+                        <TableHead className="w-[56px]" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {createSelectedRows.map((row) => (
+                        <TableRow key={row.menuItemId}>
+                          <TableCell>{row.menuItemName}</TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              min={1}
+                              max={999}
+                              className="ml-auto w-24 text-right tabular-nums"
+                              value={createInventoryDraft[row.menuItemId] ?? 0}
+                              onChange={(e) => {
+                                const qty = Number(e.target.value) || 0;
+                                setCreateInventoryDraft((prev) => ({
+                                  ...prev,
+                                  [row.menuItemId]: qty,
+                                }));
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Remove ${row.menuItemName}`}
+                              onClick={() =>
+                                setCreateInventoryDraft((prev) => ({
+                                  ...prev,
+                                  [row.menuItemId]: 0,
+                                }))
+                              }
+                            >
+                              <X className="size-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+              <Button onClick={handleCreateBatch} disabled={creating || !canCreateBatch}>
+                {creating ? "Creating…" : "Create batch"}
+              </Button>
+              {existingBatchDates.has(createBatchDate) ? (
+                <p className="text-sm text-muted-foreground">
+                  A batch already exists for this batch date.
+                </p>
+              ) : null}
+              {!createBatchDate || !createPickupDate ? (
+                <p className="text-sm text-muted-foreground">
+                  Batch date and pickup date are required.
+                </p>
+              ) : createSelectedRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Add at least one item with quantity greater than zero.
+                </p>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       ) : null}
@@ -427,6 +546,7 @@ function AdminBatchesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Batch date</TableHead>
+                  <TableHead>Pickup date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Pickup / delivery</TableHead>
                   <TableHead className="text-right">Orders</TableHead>
@@ -439,7 +559,7 @@ function AdminBatchesPage() {
               <TableBody>
                 {batches.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-muted-foreground">
+                    <TableCell colSpan={9} className="text-muted-foreground">
                       No batches yet — create your first batch date to get started.
                     </TableCell>
                   </TableRow>
@@ -448,6 +568,9 @@ function AdminBatchesPage() {
                     <TableRow key={batch.id}>
                       <TableCell className="font-medium">
                         {formatDateString(batch.weekStart, "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        {batch.pickupDate ? formatDateString(batch.pickupDate, "MMM d, yyyy") : "—"}
                       </TableCell>
                       <TableCell>
                         <Badge variant={batchStatusBadgeVariant(batch.status)}>
@@ -503,12 +626,17 @@ function AdminBatchesPage() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <CardTitle className="text-base">
-                    {formatWeekOfLabel(selectedBatch.weekStart)}
+                    Batch date {formatDateString(selectedBatch.weekStart, "MMM d, yyyy")}
                   </CardTitle>
                   <CardDescription className="flex flex-wrap items-center gap-2 pt-1">
                     <Badge variant={batchStatusBadgeVariant(selectedBatch.status)}>
                       {formatBatchStatus(selectedBatch.status)}
                     </Badge>
+                    {selectedBatch.pickupDate ? (
+                      <span>
+                        Pickup {formatDateString(selectedBatch.pickupDate, "MMM d, yyyy")}
+                      </span>
+                    ) : null}
                     <span>{selectedBatch.pickupWindowLabel ?? "No pickup window"}</span>
                     {selectedBatch.reviewDeadline ? (
                       <span>
@@ -542,8 +670,8 @@ function AdminBatchesPage() {
               <CardHeader>
                 <CardTitle className="text-base">Eligible memberships</CardTitle>
                 <CardDescription>
-                  Active memberships that will receive empty selection orders when you open the menu
-                  for selection
+                  Active memberships that will receive empty selection orders when you send this
+                  batch to members for selection
                   {excludedInactiveCount > 0
                     ? ` · ${excludedInactiveCount} paused or cancelled excluded`
                     : ""}
@@ -695,7 +823,7 @@ function AdminBatchesPage() {
           {canEditInventory ? (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Open menu for selection</CardTitle>
+                <CardTitle className="text-base">Send to members for selection</CardTitle>
                 <CardDescription>
                   Creates one empty order per eligible membership so customers can choose meals.
                   Does not assign line items or charge cards.
@@ -717,7 +845,7 @@ function AdminBatchesPage() {
                   onClick={handleOpenMenuForSelection}
                   disabled={!canOpenMenu || openingMenu || loadingInventory}
                 >
-                  {openingMenu ? "Opening…" : "Open menu for selection"}
+                  {openingMenu ? "Sending…" : "Send to members for selection"}
                 </Button>
               </CardContent>
               {!canOpenMenu && canEditInventory && openMenuBlockReasons.length > 0 ? (
@@ -741,10 +869,10 @@ function AdminBatchesPage() {
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <CardTitle className="text-base">Weekly menu</CardTitle>
+                  <CardTitle className="text-base">Items in this batch</CardTitle>
                   <CardDescription>
                     Search the active catalog to choose meals for this batch, then set planned
-                    quantities. Menu editing locks after selection opens.
+                    quantities. Item editing locks after selection opens.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -773,19 +901,19 @@ function AdminBatchesPage() {
                 />
               ) : null}
               {loadingInventory ? (
-                <p className="text-sm text-muted-foreground">Loading weekly menu…</p>
+                <p className="text-sm text-muted-foreground">Loading batch items…</p>
               ) : selectedWeeklyMenuRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {canEditInventory
-                    ? "No meals selected yet — search the active menu to build this week's offering."
+                    ? "No items selected yet — search the active menu to build this batch."
                     : selectedBatch.status === "selection_open"
-                      ? "Selection is open and the weekly menu is locked."
-                      : "No planned meals saved for this batch."}
+                      ? "Selection is open and batch items are locked."
+                      : "No planned items saved for this batch."}
                 </p>
               ) : (
                 <div>
                   <p className="mb-3 text-sm font-medium">
-                    Selected weekly meals ({selectedWeeklyMenuRows.length})
+                    Selected items ({selectedWeeklyMenuRows.length})
                   </p>
                   <Table>
                     <TableHeader>

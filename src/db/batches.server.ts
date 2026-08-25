@@ -98,21 +98,6 @@ function formatMemberLabel(name: string | null, email: string): string {
   return trimmed ? `${trimmed} (${email})` : email;
 }
 
-function weekStartMonday(base = new Date()): Date {
-  const d = new Date(base);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(12, 0, 0, 0);
-  return d;
-}
-
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
 function resolveUnitPriceCents(
   item: { price4ozCents: number | null; price6ozCents: number | null },
   category: { price4ozCents: number; price6ozCents: number } | null,
@@ -201,15 +186,34 @@ export async function listActiveMenuItemsForAdmin(): Promise<AdminMenuItemOption
 }
 
 export type CreateWeeklyBatchInput = {
-  weekStart?: string;
+  /** Stored in `weekStart` until a dedicated batch-date column exists. */
+  batchDate: string;
+  pickupDate: string;
   pickupWindowId?: string;
+  items: Array<{ menuItemId: string; qtyCooked: number }>;
 };
 
-/** Create a planning batch for the given week (defaults to current Monday). */
-export async function createWeeklyBatch(input: CreateWeeklyBatchInput = {}): Promise<string> {
+/** Create a planning batch with inventory for the given dates. */
+export async function createWeeklyBatch(input: CreateWeeklyBatchInput): Promise<string> {
   const db = getDb();
-  const weekStart = input.weekStart ? new Date(`${input.weekStart}T12:00:00`) : weekStartMonday();
-  const pickupDate = addDays(weekStart, 6);
+  const weekStart = new Date(`${input.batchDate}T12:00:00`);
+  const pickupDate = new Date(`${input.pickupDate}T12:00:00`);
+
+  if (Number.isNaN(weekStart.getTime()) || Number.isNaN(pickupDate.getTime())) {
+    throw new Error("Invalid batch or pickup date.");
+  }
+
+  const plannedItems = input.items
+    .map((item) => ({
+      menuItemId: item.menuItemId,
+      qtyCooked: Math.max(0, Math.min(999, Math.floor(item.qtyCooked))),
+    }))
+    .filter((item) => item.qtyCooked > 0);
+
+  if (plannedItems.length === 0) {
+    throw new Error("Add at least one menu item with quantity greater than zero.");
+  }
+
   const reviewDeadline = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
   const chargeScheduledAt = new Date(reviewDeadline.getTime() + 60 * 60 * 1000);
 
@@ -231,18 +235,44 @@ export async function createWeeklyBatch(input: CreateWeeklyBatchInput = {}): Pro
     .limit(1);
 
   if (existing.length > 0) {
-    throw new Error(`A batch already exists for week of ${weekStart.toISOString().slice(0, 10)}.`);
+    throw new Error(`A batch already exists for batch date ${input.batchDate}.`);
+  }
+
+  const menuItemIds = plannedItems.map((item) => item.menuItemId);
+  const validMenuItems = await db
+    .select({ id: menuItems.id })
+    .from(menuItems)
+    .where(and(eq(menuItems.active, true), inArray(menuItems.id, menuItemIds)));
+
+  const validIds = new Set(validMenuItems.map((m) => m.id));
+  const inventoryItems = plannedItems.filter((item) => validIds.has(item.menuItemId));
+
+  if (inventoryItems.length === 0) {
+    throw new Error("No valid active menu items were selected.");
   }
 
   const id = randomUUID();
-  await db.insert(weeklyBatches).values({
-    id,
-    weekStart,
-    pickupDate,
-    pickupWindowId,
-    status: "planning",
-    reviewDeadline,
-    chargeScheduledAt,
+
+  await db.transaction(async (tx) => {
+    await tx.insert(weeklyBatches).values({
+      id,
+      weekStart,
+      pickupDate,
+      pickupWindowId,
+      status: "planning",
+      reviewDeadline,
+      chargeScheduledAt,
+    });
+
+    for (const item of inventoryItems) {
+      await tx.insert(batchItems).values({
+        id: randomUUID(),
+        batchId: id,
+        menuItemId: item.menuItemId,
+        qtyCooked: item.qtyCooked,
+        qtyRemaining: item.qtyCooked,
+      });
+    }
   });
 
   return id;
@@ -671,7 +701,7 @@ export async function openMenuForSelection(
     const inventory = await orderBatchInventory(batchId, tx);
 
     if (inventory.length === 0) {
-      throw new Error("Add at least one weekly menu item before opening selection.");
+      throw new Error("Add at least one batch item before opening selection.");
     }
 
     if (eligibility.eligible.length === 0) {

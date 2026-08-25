@@ -45,11 +45,17 @@ const optionalBatchFilterSchema = z.object({
 });
 
 const createBatchSchema = z.object({
-  weekStart: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+  batchDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  pickupDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pickupWindowId: z.string().uuid().optional(),
+  items: z
+    .array(
+      z.object({
+        menuItemId: z.string().uuid(),
+        qtyCooked: z.number().int().min(1).max(999),
+      }),
+    )
+    .min(1),
 });
 
 const saveInventorySchema = z.object({

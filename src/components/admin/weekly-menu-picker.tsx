@@ -44,7 +44,7 @@ export function WeeklyMenuPicker({
         >
           <span className="flex items-center gap-2 truncate">
             <Plus className="size-4 shrink-0" />
-            Add meal to weekly menu
+            Add item to batch
           </span>
           <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
         </Button>
