@@ -104,6 +104,9 @@ export function centsToLabel(cents: number): string {
 export function formatOrderStatus(status: OrderStatus): string {
   const labels: Record<OrderStatus, string> = {
     draft: "Draft",
+    awaiting_selection: "Awaiting selection",
+    selection_in_progress: "Selection in progress",
+    selection_submitted: "Selection submitted",
     pending_customer_review: "Review needed",
     changes_requested: "Changes pending",
     approved: "Approved",
@@ -129,6 +132,13 @@ export function orderStatusBadgeVariant(
   status: OrderStatus,
 ): "default" | "secondary" | "destructive" | "outline" {
   if (status === "pending_customer_review" || status === "changes_requested") return "default";
+  if (
+    status === "awaiting_selection" ||
+    status === "selection_in_progress" ||
+    status === "selection_submitted"
+  ) {
+    return "outline";
+  }
   if (status === "payment_failed") return "destructive";
   if (status === "approved" || status === "ready_for_pickup") return "secondary";
   return "outline";

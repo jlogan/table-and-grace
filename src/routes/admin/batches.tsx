@@ -38,7 +38,7 @@ import {
   fetchAdminPickupWindows,
   fetchBatchInventory,
   fetchBatchMealDemand,
-  publishAdminWeeklyBatch,
+  openAdminMenuForSelection,
   saveAdminBatchInventory,
 } from "@/orders/admin.functions.server";
 import {
@@ -68,6 +68,16 @@ function formatPortionLabel(portion: "4oz" | "6oz"): string {
   return portion === "4oz" ? "4 oz" : "6 oz";
 }
 
+function defaultSelectionDeadlineLocal(): string {
+  const d = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
+function localDatetimeToIso(value: string): string {
+  return new Date(value).toISOString();
+}
+
 function formatWeekOfLabel(weekStart: string): string {
   return `Week of ${formatDateString(weekStart, "MMM d, yyyy")}`;
 }
@@ -92,7 +102,7 @@ function AdminBatchesPage() {
   const createFn = useServerFn(createAdminWeeklyBatch);
   const inventoryFn = useServerFn(fetchBatchInventory);
   const saveInventoryFn = useServerFn(saveAdminBatchInventory);
-  const publishFn = useServerFn(publishAdminWeeklyBatch);
+  const openMenuFn = useServerFn(openAdminMenuForSelection);
   const refreshBatchesFn = useServerFn(fetchAdminBatches);
   const mealDemandFn = useServerFn(fetchBatchMealDemand);
   const projectedMealDemandFn = useServerFn(fetchBatchProjectedMealDemand);
@@ -112,7 +122,10 @@ function AdminBatchesPage() {
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [publishing, setPublishing] = useState(false);
+  const [openingMenu, setOpeningMenu] = useState(false);
+  const [selectionDeadlineLocal, setSelectionDeadlineLocal] = useState(
+    defaultSelectionDeadlineLocal,
+  );
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -173,22 +186,21 @@ function AdminBatchesPage() {
     () => new Set(selectedWeeklyMenuRows.map((row) => row.menuItemId)),
     [selectedWeeklyMenuRows],
   );
-  const publishBlockReasons: string[] = [];
+  const openMenuBlockReasons: string[] = [];
   if (!canEditInventory) {
-    publishBlockReasons.push("Batch is not in planning or draft.");
+    openMenuBlockReasons.push("Batch is not in planning or draft.");
   }
   if (savedInventoryCount === 0) {
-    publishBlockReasons.push("Save planned quantities for at least one meal before publishing.");
-  }
-  if (eligibleCount === 0) {
-    publishBlockReasons.push("No active memberships are eligible for this batch.");
-  }
-  if (unresolvedMembers.length > 0) {
-    publishBlockReasons.push(
-      `${unresolvedMembers.length} active member(s) need meals per week set before publishing.`,
+    openMenuBlockReasons.push(
+      "Save planned quantities for at least one meal before opening selection.",
     );
   }
-  const canPublish = publishBlockReasons.length === 0;
+  if (eligibleCount === 0) {
+    openMenuBlockReasons.push(
+      "No active memberships with resolved meal allowances are eligible for this batch.",
+    );
+  }
+  const canOpenMenu = openMenuBlockReasons.length === 0;
 
   async function refreshBatches() {
     const next = await refreshBatchesFn();
@@ -300,21 +312,26 @@ function AdminBatchesPage() {
     }
   }
 
-  async function handlePublish() {
+  async function handleOpenMenuForSelection() {
     if (!selectedBatchId) return;
-    setPublishing(true);
+    setOpeningMenu(true);
     setError(null);
     setMessage(null);
     try {
-      const result = await publishFn({ data: { batchId: selectedBatchId } });
+      const result = await openMenuFn({
+        data: {
+          batchId: selectedBatchId,
+          selectionDeadline: localDatetimeToIso(selectionDeadlineLocal),
+        },
+      });
       const next = await refreshBatches();
-      const published = next.find((b) => b.id === selectedBatchId);
-      await loadInventory(selectedBatchId, published?.status);
-      setMessage(`Published — ${result.ordersCreated} order(s) sent for customer review.`);
+      const updated = next.find((b) => b.id === selectedBatchId);
+      await loadInventory(selectedBatchId, updated?.status);
+      setMessage(`Open menu for selection — ${result.ordersCreated} empty order(s) created.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not publish batch.");
+      setError(e instanceof Error ? e.message : "Could not open menu for selection.");
     } finally {
-      setPublishing(false);
+      setOpeningMenu(false);
     }
   }
 
@@ -325,10 +342,10 @@ function AdminBatchesPage() {
           <h2 className="text-lg font-semibold tracking-tight text-foreground">Weekly batches</h2>
           <p className="text-sm text-muted-foreground">
             {mode === "list"
-              ? "Select a batch to manage inventory and publish, or create a new batch date."
+              ? "Select a batch to manage inventory, open selection, or create a new batch date."
               : mode === "create"
                 ? "Choose the batch week, pickup window, and open a planning batch."
-                : "Choose weekly menu meals, set planned quantities, review member demand, then publish for customer review."}
+                : "Choose weekly menu meals, set planned quantities, then open the menu for customer selection."}
           </p>
         </div>
         {mode === "list" ? (
@@ -415,13 +432,14 @@ function AdminBatchesPage() {
                   <TableHead className="text-right">Orders</TableHead>
                   <TableHead className="text-right">Items</TableHead>
                   <TableHead>Review deadline</TableHead>
+                  <TableHead>Selection deadline</TableHead>
                   <TableHead className="w-[140px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {batches.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-muted-foreground">
+                    <TableCell colSpan={8} className="text-muted-foreground">
                       No batches yet — create your first batch date to get started.
                     </TableCell>
                   </TableRow>
@@ -442,6 +460,11 @@ function AdminBatchesPage() {
                       <TableCell>
                         {batch.reviewDeadline
                           ? formatDateString(batch.reviewDeadline, "MMM d, h:mm a")
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {batch.selectionDeadline
+                          ? formatDateString(batch.selectionDeadline, "MMM d, h:mm a")
                           : "—"}
                       </TableCell>
                       <TableCell>
@@ -493,6 +516,12 @@ function AdminBatchesPage() {
                         {formatDateString(selectedBatch.reviewDeadline, "MMM d, h:mm a")}
                       </span>
                     ) : null}
+                    {selectedBatch.selectionDeadline ? (
+                      <span>
+                        · Selection deadline{" "}
+                        {formatDateString(selectedBatch.selectionDeadline, "MMM d, h:mm a")}
+                      </span>
+                    ) : null}
                   </CardDescription>
                 </div>
                 {selectedBatch.orderCount > 0 ? (
@@ -513,7 +542,8 @@ function AdminBatchesPage() {
               <CardHeader>
                 <CardTitle className="text-base">Eligible memberships</CardTitle>
                 <CardDescription>
-                  Active memberships that will receive orders when you publish
+                  Active memberships that will receive empty selection orders when you open the menu
+                  for selection
                   {excludedInactiveCount > 0
                     ? ` · ${excludedInactiveCount} paused or cancelled excluded`
                     : ""}
@@ -606,7 +636,9 @@ function AdminBatchesPage() {
                 <CardDescription>
                   {showProjectedDemand
                     ? "Planning indicator — compares total eligible membership meals to your planned quantities. Per-meal counts are not confirmed customer demand."
-                    : "Actual order-line demand vs planned quantity (after publish)"}
+                    : selectedBatch?.status === "selection_open"
+                      ? "Selection is open. B1A creates empty orders only, so per-meal selected demand remains 0 until the picker is built."
+                      : "Actual order-line demand vs planned quantity (after publish)"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -660,6 +692,51 @@ function AdminBatchesPage() {
             </Card>
           </div>
 
+          {canEditInventory ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Open menu for selection</CardTitle>
+                <CardDescription>
+                  Creates one empty order per eligible membership so customers can choose meals.
+                  Does not assign line items or charge cards.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap items-end gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="selection-deadline">Selection deadline</Label>
+                  <Input
+                    id="selection-deadline"
+                    type="datetime-local"
+                    className="w-[260px]"
+                    disabled={!canEditInventory}
+                    value={selectionDeadlineLocal}
+                    onChange={(e) => setSelectionDeadlineLocal(e.target.value)}
+                  />
+                </div>
+                <Button
+                  onClick={handleOpenMenuForSelection}
+                  disabled={!canOpenMenu || openingMenu || loadingInventory}
+                >
+                  {openingMenu ? "Opening…" : "Open menu for selection"}
+                </Button>
+              </CardContent>
+              {!canOpenMenu && canEditInventory && openMenuBlockReasons.length > 0 ? (
+                <CardContent className="pt-0">
+                  <p className="text-sm text-muted-foreground">{openMenuBlockReasons.join(" ")}</p>
+                </CardContent>
+              ) : null}
+              {unresolvedMembers.length > 0 ? (
+                <CardContent className="pt-0">
+                  <p className="text-sm text-muted-foreground">
+                    {unresolvedMembers.length} membership
+                    {unresolvedMembers.length === 1 ? "" : "s"} without meals per week will be
+                    skipped (selection can still open for eligible members).
+                  </p>
+                </CardContent>
+              ) : null}
+            </Card>
+          ) : null}
+
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -667,7 +744,7 @@ function AdminBatchesPage() {
                   <CardTitle className="text-base">Weekly menu</CardTitle>
                   <CardDescription>
                     Search the active catalog to choose meals for this batch, then set planned
-                    quantities.
+                    quantities. Menu editing locks after selection opens.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -678,14 +755,8 @@ function AdminBatchesPage() {
                   >
                     {saving ? "Saving…" : "Save planned quantities"}
                   </Button>
-                  <Button onClick={handlePublish} disabled={!canPublish || publishing}>
-                    {publishing ? "Publishing…" : "Publish for review"}
-                  </Button>
                 </div>
               </div>
-              {!canPublish && canEditInventory && publishBlockReasons.length > 0 ? (
-                <p className="text-sm text-muted-foreground">{publishBlockReasons.join(" ")}</p>
-              ) : null}
             </CardHeader>
             <CardContent className="space-y-4">
               {canEditInventory ? (
@@ -707,7 +778,9 @@ function AdminBatchesPage() {
                 <p className="text-sm text-muted-foreground">
                   {canEditInventory
                     ? "No meals selected yet — search the active menu to build this week's offering."
-                    : "No planned meals saved for this batch."}
+                    : selectedBatch.status === "selection_open"
+                      ? "Selection is open and the weekly menu is locked."
+                      : "No planned meals saved for this batch."}
                 </p>
               ) : (
                 <div>

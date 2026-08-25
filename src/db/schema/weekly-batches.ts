@@ -13,6 +13,7 @@ import { pickupWindows } from "./pickup-windows.ts";
 export const batchStatuses = [
   "planning",
   "draft",
+  "selection_open",
   "pending_customer_review",
   "approved",
   "charging",
@@ -32,6 +33,8 @@ export const weeklyBatches = mysqlTable(
     status: mysqlEnum("status", batchStatuses).notNull().default("planning"),
     chefInternalNotes: text("chef_internal_notes"),
     reviewDeadline: timestamp("review_deadline"),
+    /** Customer meal-selection cutoff for the selection lifecycle (distinct from review_deadline). */
+    selectionDeadline: timestamp("selection_deadline"),
     chargeScheduledAt: timestamp("charge_scheduled_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),

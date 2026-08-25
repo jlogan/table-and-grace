@@ -71,6 +71,13 @@
       "when": 1787470000000,
       "tag": "0009_food_profile_phase1",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1787563740676,
+      "tag": "0011_sour_hercules",
+      "breakpoints": true
     }
   ]
 }

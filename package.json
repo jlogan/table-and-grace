@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit",
     "env:validate": "node --experimental-strip-types scripts/validate-env.ts",
     "test:auth": "node --experimental-strip-types scripts/test-auth-primitives.ts",
+    "test:selection": "tsx scripts/test-selection-lifecycle.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

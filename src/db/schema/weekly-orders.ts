@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/mysql-core";
 
 import { billingCycles } from "./billing-cycles.ts";
+import { portionDefaults } from "./customer-profiles.ts";
 import { memberships } from "./memberships.ts";
 import { paymentSchedules } from "./payment-schedules.ts";
 import { pickupWindows } from "./pickup-windows.ts";
@@ -18,6 +19,9 @@ import { weeklyBatches } from "./weekly-batches.ts";
 
 export const orderStatuses = [
   "draft",
+  "awaiting_selection",
+  "selection_in_progress",
+  "selection_submitted",
   "pending_customer_review",
   "changes_requested",
   "approved",
@@ -49,6 +53,11 @@ export const weeklyOrders = mysqlTable(
     }),
     /** Frozen from customer profile at approval time. */
     paymentScheduleSnapshot: mysqlEnum("payment_schedule_snapshot", paymentSchedules),
+    /** Frozen from membership at selection open (nullable for historical orders). */
+    mealsAllowedSnapshot: int("meals_allowed_snapshot"),
+    portionSnapshot: mysqlEnum("portion_snapshot", portionDefaults),
+    planSlugSnapshot: varchar("plan_slug_snapshot", { length: 64 }),
+    planNameSnapshot: varchar("plan_name_snapshot", { length: 255 }),
     /** When this order becomes chargeable (batch schedule or monthly anchor). */
     chargeDueAt: timestamp("charge_due_at"),
     billingCycleId: varchar("billing_cycle_id", { length: 36 }).references(() => billingCycles.id, {
@@ -67,6 +76,8 @@ export const weeklyOrders = mysqlTable(
     /** Set when order was imported from historical POS data. */
     importedAt: timestamp("imported_at"),
     reviewedAt: timestamp("reviewed_at"),
+    /** Set when the customer submits their meal selection (selection lifecycle). */
+    selectionSubmittedAt: timestamp("selection_submitted_at"),
     approvedAt: timestamp("approved_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),

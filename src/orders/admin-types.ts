@@ -13,6 +13,7 @@ export type AdminBatchSummary = {
   pickupDate: string | null;
   status: BatchStatus;
   reviewDeadline: string | null;
+  selectionDeadline: string | null;
   chargeScheduledAt: string | null;
   pickupWindowLabel: string | null;
   orderCount: number;
@@ -79,6 +80,7 @@ export function formatBatchStatus(status: BatchStatus): string {
   const labels: Record<BatchStatus, string> = {
     planning: "Planning",
     draft: "Draft",
+    selection_open: "Selection open",
     pending_customer_review: "Customer review",
     approved: "Approved",
     charging: "Charging",
@@ -90,7 +92,7 @@ export function formatBatchStatus(status: BatchStatus): string {
 export function batchStatusBadgeVariant(
   status: BatchStatus,
 ): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "pending_customer_review") return "default";
+  if (status === "pending_customer_review" || status === "selection_open") return "default";
   if (status === "planning" || status === "draft") return "outline";
   if (status === "closed") return "secondary";
   return "secondary";

@@ -9,6 +9,7 @@ import {
   listAdminBatches,
   listAdminOrders,
   listAdminPickupWindows,
+  openMenuForSelection,
   publishWeeklyBatch,
   saveBatchInventory,
 } from "@/db/batches.server";
@@ -103,6 +104,20 @@ export const publishAdminWeeklyBatch = createServerFn({ method: "POST" })
   .middleware([requireRoleMiddleware("admin")])
   .validator(batchIdSchema)
   .handler(async ({ data }) => publishWeeklyBatch(data.batchId));
+
+const openMenuForSelectionSchema = z.object({
+  batchId: z.string().uuid(),
+  selectionDeadline: z.string().datetime(),
+});
+
+export const openAdminMenuForSelection = createServerFn({ method: "POST" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(openMenuForSelectionSchema)
+  .handler(async ({ data }) => {
+    return openMenuForSelection(data.batchId, {
+      selectionDeadline: new Date(data.selectionDeadline),
+    });
+  });
 
 export const fetchAdminDashboard = createServerFn({ method: "GET" })
   .middleware([requireRoleMiddleware("admin")])

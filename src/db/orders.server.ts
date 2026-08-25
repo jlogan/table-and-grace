@@ -6,6 +6,7 @@ import { AuthError } from "@/auth/user.server";
 import type { PaymentSchedule } from "@/db/schema/payment-schedules.ts";
 import type { CustomerOrderSummary, WeeklyOrderReview } from "@/orders/review-types.ts";
 import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
+import { resolveOrderPlanName, resolveOrderPlanSlug } from "@/orders/order-snapshots.ts";
 export type { CustomerOrderSummary, WeeklyOrderReview } from "@/orders/review-types.ts";
 export { centsToLabel, formatOrderStatus, formatPaymentSchedule } from "@/orders/review-types.ts";
 
@@ -174,8 +175,10 @@ export async function listCustomerOrderSummaries(userId: string): Promise<Custom
       reviewDeadline: weeklyBatches.reviewDeadline,
       pickupLabel: pickupWindows.label,
       membershipId: weeklyOrders.membershipId,
-      planSlug: memberships.planSlug,
-      planName: planCategories.name,
+      planSlugSnapshot: weeklyOrders.planSlugSnapshot,
+      planNameSnapshot: weeklyOrders.planNameSnapshot,
+      membershipPlanSlug: memberships.planSlug,
+      planCategoryName: planCategories.name,
       itemCount: sql<number>`coalesce(sum(${orderLines.qty}), 0)`.mapWith(Number),
     })
     .from(weeklyOrders)
@@ -196,6 +199,8 @@ export async function listCustomerOrderSummaries(userId: string): Promise<Custom
       weeklyBatches.reviewDeadline,
       pickupWindows.label,
       weeklyOrders.membershipId,
+      weeklyOrders.planSlugSnapshot,
+      weeklyOrders.planNameSnapshot,
       memberships.planSlug,
       planCategories.name,
     )
@@ -203,7 +208,10 @@ export async function listCustomerOrderSummaries(userId: string): Promise<Custom
     .limit(20);
 
   return rows.map((row) => {
-    const planSlug = row.planSlug ?? null;
+    const planSlug = resolveOrderPlanSlug({
+      planSlugSnapshot: row.planSlugSnapshot,
+      membershipPlanSlug: row.membershipPlanSlug,
+    });
     return {
       id: row.id,
       status: row.status,
@@ -218,7 +226,12 @@ export async function listCustomerOrderSummaries(userId: string): Promise<Custom
       externalOrderNumber: row.externalOrderNumber,
       membershipId: row.membershipId,
       planSlug,
-      planName: planSlug ? (row.planName ?? planSlug) : null,
+      planName: resolveOrderPlanName({
+        planNameSnapshot: row.planNameSnapshot,
+        planSlugSnapshot: row.planSlugSnapshot,
+        membershipPlanSlug: row.membershipPlanSlug,
+        membershipPlanName: row.planCategoryName,
+      }),
     };
   });
 }
@@ -334,8 +347,16 @@ export async function getOrderReviewForCustomer(
       reviewedAt: order.reviewedAt?.toISOString() ?? null,
       approvedAt: order.approvedAt?.toISOString() ?? null,
       membershipId: order.membershipId,
-      planSlug: membershipContext.planSlug,
-      planName: membershipContext.planName,
+      planSlug: resolveOrderPlanSlug({
+        planSlugSnapshot: order.planSlugSnapshot,
+        membershipPlanSlug: membershipContext.planSlug,
+      }),
+      planName: resolveOrderPlanName({
+        planNameSnapshot: order.planNameSnapshot,
+        planSlugSnapshot: order.planSlugSnapshot,
+        membershipPlanSlug: membershipContext.planSlug,
+        membershipPlanName: membershipContext.planName,
+      }),
     },
     batch: {
       id: batch.id,

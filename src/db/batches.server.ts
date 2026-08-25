@@ -12,8 +12,16 @@ import type {
 
 import { toIsoDateString } from "@/lib/dates.ts";
 import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
+import {
+  buildSelectionOrderSnapshots,
+  resolveOrderPlanName,
+  resolveOrderPlanSlug,
+} from "@/orders/order-snapshots.ts";
 
 import { getDb } from "./index.server.ts";
+import type { PaymentSchedule } from "./schema/payment-schedules.ts";
+
+type DbClient = ReturnType<typeof getDb>;
 import { batchItems } from "./schema/batch-items.ts";
 import { customerProfiles } from "./schema/customer-profiles.ts";
 import { memberships } from "./schema/memberships.ts";
@@ -38,6 +46,8 @@ export type PublishEligibleMember = {
   planName: string | null;
   mealsPerWeek: number;
   portionDefault: Portion;
+  membershipPaymentSchedule: PaymentSchedule;
+  profilePaymentSchedule: PaymentSchedule;
   defaultPickupWindowId: string | null;
 };
 
@@ -142,6 +152,7 @@ export async function listAdminBatches(): Promise<AdminBatchSummary[]> {
       pickupDate: weeklyBatches.pickupDate,
       status: weeklyBatches.status,
       reviewDeadline: weeklyBatches.reviewDeadline,
+      selectionDeadline: weeklyBatches.selectionDeadline,
       chargeScheduledAt: weeklyBatches.chargeScheduledAt,
       pickupWindowLabel: pickupWindows.label,
       orderCount: sql<number>`(
@@ -161,6 +172,7 @@ export async function listAdminBatches(): Promise<AdminBatchSummary[]> {
     pickupDate: toIsoDateString(row.pickupDate),
     status: row.status,
     reviewDeadline: row.reviewDeadline?.toISOString() ?? null,
+    selectionDeadline: row.selectionDeadline?.toISOString() ?? null,
     chargeScheduledAt: row.chargeScheduledAt?.toISOString() ?? null,
     pickupWindowLabel: row.pickupWindowLabel,
     orderCount: row.orderCount,
@@ -348,8 +360,58 @@ export async function saveBatchInventory(input: SaveBatchInventoryInput): Promis
   }
 }
 
-export async function listPublishEligibleMembers(): Promise<PublishEligibility> {
-  const db = getDb();
+export type ActiveMembershipRow = {
+  membershipId: string;
+  userId: string;
+  email: string;
+  name: string | null;
+  planSlug: string | null;
+  planName: string | null;
+  mealsPerWeek: number | null;
+  dietaryTags: string[] | null;
+  portionDefault: Portion;
+  membershipPaymentSchedule: PaymentSchedule;
+  profilePaymentSchedule: PaymentSchedule;
+  defaultPickupWindowId: string | null;
+};
+
+/** Pure eligibility split used by publish and selection flows. */
+export function classifyActiveMembershipRows(rows: ActiveMembershipRow[]): {
+  eligible: PublishEligibleMember[];
+  unresolved: PublishEligibility["unresolved"];
+} {
+  const eligible: PublishEligibleMember[] = [];
+  const unresolved: PublishEligibility["unresolved"] = [];
+
+  for (const row of rows) {
+    const resolvedMeals = resolveMemberMealsPerWeek(row.mealsPerWeek, row.dietaryTags);
+    if (resolvedMeals == null) {
+      unresolved.push({ userId: row.userId, email: row.email, name: row.name });
+      continue;
+    }
+
+    eligible.push({
+      membershipId: row.membershipId,
+      userId: row.userId,
+      email: row.email,
+      name: row.name,
+      planSlug: row.planSlug,
+      planName: row.planSlug ? (row.planName ?? row.planSlug) : null,
+      mealsPerWeek: resolvedMeals,
+      portionDefault: row.portionDefault,
+      membershipPaymentSchedule: row.membershipPaymentSchedule,
+      profilePaymentSchedule: row.profilePaymentSchedule,
+      defaultPickupWindowId: row.defaultPickupWindowId,
+    });
+  }
+
+  return { eligible, unresolved };
+}
+
+export async function listPublishEligibleMembers(
+  client: DbClient = getDb(),
+): Promise<PublishEligibility> {
+  const db = client;
 
   const [inactiveCountRow] = await db
     .select({ count: sql<number>`count(*)`.mapWith(Number) })
@@ -367,6 +429,8 @@ export async function listPublishEligibleMembers(): Promise<PublishEligibility> 
       mealsPerWeek: memberships.mealsPerWeek,
       dietaryTags: customerProfiles.dietaryTags,
       portionDefault: memberships.portionDefault,
+      membershipPaymentSchedule: memberships.paymentSchedule,
+      profilePaymentSchedule: customerProfiles.paymentSchedule,
       defaultPickupWindowId: customerProfiles.defaultPickupWindowId,
     })
     .from(memberships)
@@ -376,28 +440,7 @@ export async function listPublishEligibleMembers(): Promise<PublishEligibility> 
     .where(eq(memberships.status, "active"))
     .orderBy(asc(users.email), asc(memberships.id));
 
-  const eligible: PublishEligibleMember[] = [];
-  const unresolved: PublishEligibility["unresolved"] = [];
-
-  for (const row of activeRows) {
-    const resolvedMeals = resolveMemberMealsPerWeek(row.mealsPerWeek, row.dietaryTags);
-    if (resolvedMeals == null) {
-      unresolved.push({ userId: row.userId, email: row.email, name: row.name });
-      continue;
-    }
-
-    eligible.push({
-      membershipId: row.membershipId,
-      userId: row.userId,
-      email: row.email,
-      name: row.name,
-      planSlug: row.planSlug,
-      planName: row.planSlug ? (row.planName ?? row.planSlug) : null,
-      mealsPerWeek: resolvedMeals,
-      portionDefault: row.portionDefault,
-      defaultPickupWindowId: row.defaultPickupWindowId,
-    });
-  }
+  const { eligible, unresolved } = classifyActiveMembershipRows(activeRows);
 
   return {
     eligible,
@@ -406,7 +449,10 @@ export async function listPublishEligibleMembers(): Promise<PublishEligibility> 
   };
 }
 
-export async function orderBatchInventory(batchId: string): Promise<
+export async function orderBatchInventory(
+  batchId: string,
+  client: DbClient = getDb(),
+): Promise<
   Array<{
     menuItemId: string;
     menuItemName: string;
@@ -414,7 +460,7 @@ export async function orderBatchInventory(batchId: string): Promise<
     qtyRemaining: number;
   }>
 > {
-  const db = getDb();
+  const db = client;
 
   return db
     .select({
@@ -562,6 +608,130 @@ export async function publishWeeklyBatch(batchId: string): Promise<{ ordersCreat
   return { ordersCreated };
 }
 
+export type OpenMenuForSelectionInput = {
+  selectionDeadline: Date;
+};
+
+/** Ordered reads/writes inside openMenuForSelection's transaction (documented for tests). */
+export const OPEN_MENU_FOR_SELECTION_TX_PLAN = [
+  "read_batch",
+  "read_eligible_memberships",
+  "read_batch_inventory",
+  "read_existing_orders",
+  "insert_weekly_orders",
+  "re_read_batch",
+  "update_batch_status_and_selection_deadline",
+] as const;
+
+export function validateOpenMenuSelectionDeadline(
+  selectionDeadline: Date,
+  now: Date = new Date(),
+): void {
+  if (!(selectionDeadline instanceof Date) || Number.isNaN(selectionDeadline.getTime())) {
+    throw new Error("Selection deadline is required.");
+  }
+  if (selectionDeadline.getTime() <= now.getTime()) {
+    throw new Error("Selection deadline must be in the future.");
+  }
+}
+
+/** Pure idempotency plan: one empty order per membership not yet on the batch (no user dedupe). */
+export function planOpenMenuOrderCreates(
+  eligible: PublishEligibleMember[],
+  existingMembershipIds: ReadonlySet<string>,
+): PublishEligibleMember[] {
+  return eligible.filter((member) => !existingMembershipIds.has(member.membershipId));
+}
+
+/** Open menu for selection: one empty order per eligible active membership (no line items). */
+export async function openMenuForSelection(
+  batchId: string,
+  input: OpenMenuForSelectionInput,
+): Promise<{ ordersCreated: number }> {
+  const db = getDb();
+
+  return db.transaction(async (tx) => {
+    const [batch] = await tx
+      .select()
+      .from(weeklyBatches)
+      .where(eq(weeklyBatches.id, batchId))
+      .limit(1);
+
+    if (!batch) {
+      throw new Error("Batch not found.");
+    }
+
+    if (!PUBLISHABLE_BATCH_STATUSES.includes(batch.status)) {
+      throw new Error("Only planning or draft batches can open the menu for selection.");
+    }
+
+    validateOpenMenuSelectionDeadline(input.selectionDeadline);
+
+    const eligibility = await listPublishEligibleMembers(tx);
+    const inventory = await orderBatchInventory(batchId, tx);
+
+    if (inventory.length === 0) {
+      throw new Error("Add at least one weekly menu item before opening selection.");
+    }
+
+    if (eligibility.eligible.length === 0) {
+      throw new Error(
+        "Cannot open selection: no active memberships with resolved meal allowances.",
+      );
+    }
+
+    const existingOrders = await tx
+      .select({ membershipId: weeklyOrders.membershipId })
+      .from(weeklyOrders)
+      .where(eq(weeklyOrders.batchId, batchId));
+
+    const existingMembershipIds = new Set(
+      existingOrders.map((o) => o.membershipId).filter((id): id is string => id != null),
+    );
+
+    const customers = planOpenMenuOrderCreates(eligibility.eligible, existingMembershipIds);
+
+    let ordersCreated = 0;
+
+    for (const customer of customers) {
+      const pickupWindowId = customer.defaultPickupWindowId ?? batch.pickupWindowId;
+      const snapshots = buildSelectionOrderSnapshots(customer);
+
+      await tx.insert(weeklyOrders).values({
+        id: randomUUID(),
+        batchId,
+        userId: customer.userId,
+        membershipId: customer.membershipId,
+        status: "awaiting_selection",
+        pickupWindowId,
+        ...snapshots,
+        subtotalCents: 0,
+        taxCents: 0,
+        totalCents: 0,
+      });
+
+      ordersCreated += 1;
+    }
+
+    const [batchBeforeUpdate] = await tx
+      .select({ status: weeklyBatches.status })
+      .from(weeklyBatches)
+      .where(eq(weeklyBatches.id, batchId))
+      .limit(1);
+
+    if (!batchBeforeUpdate || !PUBLISHABLE_BATCH_STATUSES.includes(batchBeforeUpdate.status)) {
+      throw new Error("Only planning or draft batches can open the menu for selection.");
+    }
+
+    await tx
+      .update(weeklyBatches)
+      .set({ status: "selection_open", selectionDeadline: input.selectionDeadline })
+      .where(eq(weeklyBatches.id, batchId));
+
+    return { ordersCreated };
+  });
+}
+
 /** Admin order list with customer, status, and totals; optional batch filter. */
 export async function listAdminOrders(batchId?: string): Promise<AdminOrderRow[]> {
   const db = getDb();
@@ -582,6 +752,8 @@ export async function listAdminOrders(batchId?: string): Promise<AdminOrderRow[]
       membershipPaymentSchedule: memberships.paymentSchedule,
       profilePaymentSchedule: customerProfiles.paymentSchedule,
       paymentScheduleSnapshot: weeklyOrders.paymentScheduleSnapshot,
+      planSlugSnapshot: weeklyOrders.planSlugSnapshot,
+      planNameSnapshot: weeklyOrders.planNameSnapshot,
       totalCents: weeklyOrders.totalCents,
       pickupLabel: pickupWindows.label,
       customerVisibleNote: weeklyOrders.customerVisibleNote,
@@ -601,7 +773,10 @@ export async function listAdminOrders(batchId?: string): Promise<AdminOrderRow[]
     .orderBy(desc(weeklyBatches.weekStart), users.email);
 
   return rows.map((row) => {
-    const planSlug = row.membershipPlanSlug ?? null;
+    const planSlug = resolveOrderPlanSlug({
+      planSlugSnapshot: row.planSlugSnapshot,
+      membershipPlanSlug: row.membershipPlanSlug,
+    });
     return {
       id: row.id,
       batchId: row.batchId,
@@ -621,7 +796,12 @@ export async function listAdminOrders(batchId?: string): Promise<AdminOrderRow[]
       reviewDeadline: row.reviewDeadline?.toISOString() ?? null,
       membershipId: row.membershipId,
       planSlug,
-      planName: planSlug ? (row.planCategoryName ?? planSlug) : null,
+      planName: resolveOrderPlanName({
+        planNameSnapshot: row.planNameSnapshot,
+        planSlugSnapshot: row.planSlugSnapshot,
+        membershipPlanSlug: row.membershipPlanSlug,
+        membershipPlanName: row.planCategoryName,
+      }),
     };
   });
 }

@@ -36,6 +36,7 @@ import { users } from "./schema/users.ts";
 import { weeklyBatches } from "./schema/weekly-batches.ts";
 import { weeklyOrders } from "./schema/weekly-orders.ts";
 import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
+import { resolveOrderPlanName, resolveOrderPlanSlug } from "@/orders/order-snapshots.ts";
 import type { DietaryPreferenceSlug, FoodAllergenSlug } from "@/lib/food-profile.ts";
 
 const PLAN_TAG_PREFIX = "plan:";
@@ -402,6 +403,8 @@ export async function getAdminCustomerDetail(userId: string): Promise<AdminCusto
       membershipId: weeklyOrders.membershipId,
       membershipPlanSlug: memberships.planSlug,
       planCategoryName: planCategories.name,
+      planSlugSnapshot: weeklyOrders.planSlugSnapshot,
+      planNameSnapshot: weeklyOrders.planNameSnapshot,
       membershipPaymentSchedule: memberships.paymentSchedule,
       profilePaymentSchedule: customerProfiles.paymentSchedule,
       paymentScheduleSnapshot: weeklyOrders.paymentScheduleSnapshot,
@@ -455,7 +458,10 @@ export async function getAdminCustomerDetail(userId: string): Promise<AdminCusto
       };
     }),
     orders: orderRows.map((order) => {
-      const planSlug = order.membershipPlanSlug ?? null;
+      const planSlug = resolveOrderPlanSlug({
+        planSlugSnapshot: order.planSlugSnapshot,
+        membershipPlanSlug: order.membershipPlanSlug,
+      });
       return {
         id: order.id,
         batchId: order.batchId,
@@ -471,7 +477,12 @@ export async function getAdminCustomerDetail(userId: string): Promise<AdminCusto
         pickupLabel: order.pickupLabel,
         membershipId: order.membershipId,
         planSlug,
-        planName: planSlug ? (order.planCategoryName ?? planSlug) : null,
+        planName: resolveOrderPlanName({
+          planNameSnapshot: order.planNameSnapshot,
+          planSlugSnapshot: order.planSlugSnapshot,
+          membershipPlanSlug: order.membershipPlanSlug,
+          membershipPlanName: order.planCategoryName,
+        }),
       };
     }),
   };
