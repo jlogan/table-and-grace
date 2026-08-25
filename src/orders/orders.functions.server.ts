@@ -5,8 +5,11 @@ import { requireAuthMiddleware } from "@/auth/middleware.server";
 import {
   approveCustomerOrder,
   getOrderReviewForCustomer,
+  getOrderSelectionForCustomer,
   listCustomerOrderSummaries,
   saveCustomerReviewChanges,
+  saveCustomerSelection,
+  submitCustomerSelection,
 } from "@/db/orders.server";
 
 const orderIdSchema = z.object({
@@ -31,6 +34,16 @@ const saveReviewSchema = z.object({
   comment: z.string().max(2000).optional(),
 });
 
+const selectionPicksSchema = z.object({
+  orderId: z.string().uuid(),
+  picks: z.array(
+    z.object({
+      menuItemId: z.string().uuid(),
+      qty: z.number().int().min(0).max(99),
+    }),
+  ),
+});
+
 export const fetchCustomerOrderSummaries = createServerFn({ method: "GET" })
   .middleware([requireAuthMiddleware])
   .handler(async ({ context }) => {
@@ -46,6 +59,17 @@ export const fetchCustomerOrderReview = createServerFn({ method: "GET" })
       throw new Error("Order not found.");
     }
     return review;
+  });
+
+export const fetchCustomerOrderSelection = createServerFn({ method: "GET" })
+  .middleware([requireAuthMiddleware])
+  .validator(orderIdSchema)
+  .handler(async ({ context, data }) => {
+    const selection = await getOrderSelectionForCustomer(data.orderId, context.user.id);
+    if (!selection) {
+      throw new Error("Order not found.");
+    }
+    return selection;
   });
 
 export const saveWeeklyOrderReview = createServerFn({ method: "POST" })
@@ -66,4 +90,26 @@ export const approveWeeklyOrder = createServerFn({ method: "POST" })
   .validator(orderIdSchema)
   .handler(async ({ context, data }) => {
     return approveCustomerOrder(data.orderId, context.user.id);
+  });
+
+export const saveWeeklyOrderSelection = createServerFn({ method: "POST" })
+  .middleware([requireAuthMiddleware])
+  .validator(selectionPicksSchema)
+  .handler(async ({ context, data }) => {
+    return saveCustomerSelection({
+      orderId: data.orderId,
+      userId: context.user.id,
+      picks: data.picks,
+    });
+  });
+
+export const submitWeeklyOrderSelection = createServerFn({ method: "POST" })
+  .middleware([requireAuthMiddleware])
+  .validator(selectionPicksSchema)
+  .handler(async ({ context, data }) => {
+    return submitCustomerSelection({
+      orderId: data.orderId,
+      userId: context.user.id,
+      picks: data.picks,
+    });
   });

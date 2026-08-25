@@ -47,10 +47,12 @@ function Account() {
   }
 
   const displayName = user.name?.trim() || user.email;
+  const selectionOrders = orderSummaries.filter((o) => o.needsSelection);
   const reviewOrders = orderSummaries.filter((o) => o.needsReview);
   const activeOrders = orderSummaries.filter(
     (o) =>
       !o.needsReview &&
+      !o.needsSelection &&
       o.status !== "picked_up" &&
       o.status !== "skipped" &&
       o.status !== "payment_failed",
@@ -113,6 +115,21 @@ function Account() {
         </CardContent>
       </Card>
 
+      {selectionOrders.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold tracking-tight">
+            {selectionOrders.length === 1 ? "Choose your meals" : "Choose your meals"}
+          </h2>
+          <ul className="mt-3 space-y-3">
+            {selectionOrders.map((order) => (
+              <li key={order.id}>
+                <OrderSummaryCard order={order} highlight variant="selection" />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {reviewOrders.length > 0 ? (
         <section className="mt-8">
           <h2 className="text-lg font-semibold tracking-tight">
@@ -121,7 +138,7 @@ function Account() {
           <ul className="mt-3 space-y-3">
             {reviewOrders.map((order) => (
               <li key={order.id}>
-                <OrderSummaryCard order={order} highlight />
+                <OrderSummaryCard order={order} highlight variant="review" />
               </li>
             ))}
           </ul>
@@ -138,14 +155,15 @@ function Account() {
               </li>
             ))}
           </ul>
-        ) : reviewOrders.length === 0 ? (
+        ) : reviewOrders.length === 0 && selectionOrders.length === 0 ? (
           <Card className="mt-3">
             <CardContent className="py-8 text-center">
               <p className="text-muted-foreground">
                 You don&apos;t have any current weekly orders.
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
-                When Chef Margaux publishes your batch, it will appear here for review.
+                When Chef Margaux opens your weekly menu, it will appear here for selection or
+                review.
               </p>
             </CardContent>
           </Card>
@@ -231,14 +249,32 @@ function Account() {
 function OrderSummaryCard({
   order,
   highlight,
+  variant = "default",
 }: {
   order: CustomerOrderSummary;
   highlight?: boolean;
+  variant?: "default" | "selection" | "review";
 }) {
   const weekLabel = formatWeekLabel(order.batchWeekStart);
+  const cardVariant =
+    variant === "selection" ? "selection" : variant === "review" ? "review" : "default";
+  const linkTo =
+    cardVariant === "selection" || order.status === "selection_submitted"
+      ? "/account/orders/$orderId/select"
+      : "/account/orders/$orderId";
+  const actionLabel =
+    cardVariant === "selection"
+      ? order.status === "selection_in_progress"
+        ? "Continue selection →"
+        : "Choose meals →"
+      : order.needsReview
+        ? "Review order →"
+        : order.status === "selection_submitted"
+          ? "View selection →"
+          : "View order →";
 
   return (
-    <Link to="/account/orders/$orderId" params={{ orderId: order.id }} className="block">
+    <Link to={linkTo} params={{ orderId: order.id }} className="block">
       <Card
         className={
           highlight
@@ -266,11 +302,22 @@ function OrderSummaryCard({
               {order.planName ? (
                 <p className="mt-1 text-sm text-muted-foreground">Plan: {order.planName}</p>
               ) : null}
-              <p className="mt-1 text-sm text-muted-foreground">
-                {order.itemCount} item{order.itemCount === 1 ? "" : "s"} ·{" "}
-                {centsToLabel(order.totalCents)}
-                {order.tipCents > 0 ? ` (incl. ${centsToLabel(order.tipCents)} tip)` : null}
-              </p>
+              {order.mealsAllowed != null && cardVariant === "selection" ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {order.mealsSelected} of {order.mealsAllowed} meals selected
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {order.itemCount} item{order.itemCount === 1 ? "" : "s"} ·{" "}
+                  {centsToLabel(order.totalCents)}
+                  {order.tipCents > 0 ? ` (incl. ${centsToLabel(order.tipCents)} tip)` : null}
+                </p>
+              )}
+              {order.selectionDeadline && cardVariant === "selection" ? (
+                <p className="mt-1 text-sm font-medium text-primary">
+                  Select by {format(parseISO(order.selectionDeadline), "EEE, MMM d")}
+                </p>
+              ) : null}
               {order.reviewDeadline && order.needsReview ? (
                 <p className="mt-1 text-sm font-medium text-primary">
                   Review by {format(parseISO(order.reviewDeadline), "EEE, MMM d")}
@@ -281,9 +328,7 @@ function OrderSummaryCard({
               {formatOrderStatus(order.status)}
             </Badge>
           </div>
-          <p className="mt-3 text-sm font-medium underline underline-offset-4">
-            {order.needsReview ? "Review order →" : "View order →"}
-          </p>
+          <p className="mt-3 text-sm font-medium underline underline-offset-4">{actionLabel}</p>
         </CardContent>
       </Card>
     </Link>

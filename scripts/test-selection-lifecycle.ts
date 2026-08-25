@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Unit checks for GOFOFA Phase B1A selection lifecycle (no database required).
+ * Unit checks for GOFOFA Phase B1A/B1B selection lifecycle (no database required).
  * Usage: npm run test:selection
  */
 import assert from "node:assert/strict";
@@ -14,6 +14,7 @@ import {
   type ActiveMembershipRow,
   type PublishEligibleMember,
 } from "../src/db/batches.server.ts";
+import { CUSTOMER_SELECTION_TX_PLAN } from "../src/db/orders.server.ts";
 import { batchStatuses } from "../src/db/schema/weekly-batches.ts";
 import { orderStatuses } from "../src/db/schema/weekly-orders.ts";
 import { formatBatchStatus, isMembershipBatchEligible } from "../src/orders/admin-types.ts";
@@ -25,7 +26,15 @@ import {
   resolveOrderPortion,
 } from "../src/orders/order-snapshots.ts";
 import { resolveOrderPaymentSchedule } from "../src/orders/payment-schedule.ts";
-import { formatOrderStatus } from "../src/orders/review-types.ts";
+import { formatOrderStatus, orderNeedsSelection } from "../src/orders/review-types.ts";
+import {
+  getOrderSelectionState,
+  resolveSelectionSaveStatus,
+  resolveSelectionSubmitStatus,
+  sumSelectionQty,
+  validateSelectionSavePicks,
+  validateSelectionSubmitPicks,
+} from "../src/orders/selection-types.ts";
 
 function memberRow(
   overrides: Partial<ActiveMembershipRow> & Pick<ActiveMembershipRow, "membershipId" | "userId">,
@@ -283,6 +292,204 @@ function main() {
   assert.equal(
     resolveOrderPortion({ portionSnapshot: null, membershipPortionDefault: "6oz" }),
     "6oz",
+  );
+
+  // B1B selection state: batch open, deadline, status, and meals_allowed snapshot.
+  const deadlineFuture = new Date("2026-08-25T00:00:00.000Z");
+  const deadlinePast = new Date("2026-08-24T11:00:00.000Z");
+
+  assert.deepEqual(
+    getOrderSelectionState({
+      orderStatus: "awaiting_selection",
+      batchStatus: "selection_open",
+      selectionDeadline: deadlineFuture,
+      mealsAllowed: 5,
+      now,
+    }),
+    { canEdit: true, canSubmit: true, editBlockedReason: null },
+  );
+
+  assert.deepEqual(
+    getOrderSelectionState({
+      orderStatus: "selection_in_progress",
+      batchStatus: "selection_open",
+      selectionDeadline: deadlineFuture,
+      mealsAllowed: 4,
+      now,
+    }),
+    { canEdit: true, canSubmit: true, editBlockedReason: null },
+  );
+
+  assert.equal(
+    getOrderSelectionState({
+      orderStatus: "awaiting_selection",
+      batchStatus: "selection_open",
+      selectionDeadline: deadlinePast,
+      mealsAllowed: 5,
+      now,
+    }).canEdit,
+    false,
+  );
+
+  assert.equal(
+    getOrderSelectionState({
+      orderStatus: "awaiting_selection",
+      batchStatus: "pending_customer_review",
+      selectionDeadline: deadlineFuture,
+      mealsAllowed: 5,
+      now,
+    }).canEdit,
+    false,
+  );
+
+  assert.equal(
+    getOrderSelectionState({
+      orderStatus: "selection_submitted",
+      batchStatus: "selection_open",
+      selectionDeadline: deadlineFuture,
+      mealsAllowed: 5,
+      now,
+    }).canEdit,
+    false,
+  );
+
+  assert.equal(
+    getOrderSelectionState({
+      orderStatus: "pending_customer_review",
+      batchStatus: "pending_customer_review",
+      selectionDeadline: deadlineFuture,
+      mealsAllowed: 5,
+      now,
+    }).canEdit,
+    false,
+  );
+
+  const realFutureDeadline = new Date("2999-08-25T00:00:00.000Z");
+  assert.equal(
+    orderNeedsSelection({
+      status: "awaiting_selection",
+      batchStatus: "selection_open",
+      selectionDeadline: realFutureDeadline.toISOString(),
+      mealsAllowed: 5,
+    }),
+    true,
+  );
+
+  assert.equal(
+    orderNeedsSelection({
+      status: "selection_submitted",
+      batchStatus: "selection_open",
+      selectionDeadline: realFutureDeadline.toISOString(),
+      mealsAllowed: 5,
+    }),
+    false,
+  );
+
+  const batchMenu = new Set(["meal-a", "meal-b", "meal-c"]);
+
+  assert.doesNotThrow(() =>
+    validateSelectionSavePicks(
+      [
+        { menuItemId: "meal-a", qty: 2 },
+        { menuItemId: "meal-b", qty: 1 },
+      ],
+      4,
+      batchMenu,
+    ),
+  );
+
+  assert.equal(sumSelectionQty([{ qty: 2 }, { qty: 1 }]), 3);
+
+  assert.equal(resolveSelectionSaveStatus("awaiting_selection"), "selection_in_progress");
+  assert.equal(resolveSelectionSaveStatus("selection_in_progress"), "selection_in_progress");
+
+  assert.throws(
+    () =>
+      validateSelectionSavePicks(
+        [
+          { menuItemId: "meal-a", qty: 2 },
+          { menuItemId: "meal-b", qty: 2 },
+          { menuItemId: "meal-c", qty: 1 },
+        ],
+        4,
+        batchMenu,
+      ),
+    /up to 4 meals/,
+  );
+
+  assert.doesNotThrow(() =>
+    validateSelectionSavePicks(
+      [
+        { menuItemId: "meal-a", qty: 2 },
+        { menuItemId: "meal-b", qty: 0 },
+      ],
+      4,
+      batchMenu,
+    ),
+  );
+
+  assert.throws(
+    () => validateSelectionSavePicks([{ menuItemId: "meal-a", qty: -1 }], 4, batchMenu),
+    /Quantity cannot be negative/,
+  );
+
+  assert.throws(
+    () =>
+      validateSelectionSavePicks(
+        [
+          { menuItemId: "meal-a", qty: 1 },
+          { menuItemId: "meal-a", qty: 1 },
+        ],
+        4,
+        batchMenu,
+      ),
+    /Duplicate meal selections/,
+  );
+
+  assert.throws(
+    () => validateSelectionSavePicks([{ menuItemId: "meal-off-menu", qty: 1 }], 4, batchMenu),
+    /not on this week's menu/,
+  );
+
+  assert.throws(
+    () => validateSelectionSubmitPicks([{ menuItemId: "meal-a", qty: 3 }], 4, batchMenu),
+    /Select exactly 4 meals/,
+  );
+
+  assert.doesNotThrow(() =>
+    validateSelectionSubmitPicks(
+      [
+        { menuItemId: "meal-a", qty: 2 },
+        { menuItemId: "meal-b", qty: 1 },
+        { menuItemId: "meal-c", qty: 1 },
+      ],
+      4,
+      batchMenu,
+    ),
+  );
+  assert.equal(resolveSelectionSubmitStatus(), "selection_submitted");
+
+  assert.equal(sumSelectionQty([{ qty: 2 }, { qty: 0 }, { qty: 3 }]), 5);
+
+  // B1B concurrency: per-order serialization — lock before validation and writes.
+  assert.deepEqual(CUSTOMER_SELECTION_TX_PLAN, [
+    "lock_weekly_order",
+    "re_read_order_and_batch",
+    "read_membership_context",
+    "validate_selection_editable",
+    "validate_picks",
+    "replace_order_lines",
+    "recalculate_totals",
+    "update_selection_status",
+  ]);
+  assert.equal(CUSTOMER_SELECTION_TX_PLAN[0], "lock_weekly_order");
+  assert.ok(
+    CUSTOMER_SELECTION_TX_PLAN.indexOf("validate_selection_editable") >
+      CUSTOMER_SELECTION_TX_PLAN.indexOf("lock_weekly_order"),
+  );
+  assert.ok(
+    CUSTOMER_SELECTION_TX_PLAN.indexOf("replace_order_lines") >
+      CUSTOMER_SELECTION_TX_PLAN.indexOf("validate_selection_editable"),
   );
 
   console.log("Selection lifecycle checks passed.");

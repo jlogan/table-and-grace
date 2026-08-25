@@ -43,6 +43,17 @@ export const Route = createFileRoute("/account/orders/$orderId")({
       throw redirect({ to: "/account" });
     }
 
+    if (
+      review.order.status === "awaiting_selection" ||
+      review.order.status === "selection_in_progress" ||
+      review.order.status === "selection_submitted"
+    ) {
+      throw redirect({
+        to: "/account/orders/$orderId/select",
+        params: { orderId: params.orderId },
+      });
+    }
+
     return { review };
   },
   head: () => ({

@@ -5,9 +5,29 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { AuthError } from "@/auth/user.server";
 import type { PaymentSchedule } from "@/db/schema/payment-schedules.ts";
 import type { CustomerOrderSummary, WeeklyOrderReview } from "@/orders/review-types.ts";
+import { orderNeedsSelection } from "@/orders/review-types.ts";
+import { resolveOrderMealsAllowed, resolveOrderPortion } from "@/orders/order-snapshots.ts";
+import type { SelectionPick, WeeklyOrderSelection } from "@/orders/selection-types.ts";
+import {
+  getOrderSelectionState,
+  isSelectableOrderStatus,
+  resolveSelectionSaveStatus,
+  resolveSelectionSubmitStatus,
+  sumSelectionQty,
+  validateSelectionSavePicks,
+  validateSelectionSubmitPicks,
+} from "@/orders/selection-types.ts";
 import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
 import { resolveOrderPlanName, resolveOrderPlanSlug } from "@/orders/order-snapshots.ts";
 export type { CustomerOrderSummary, WeeklyOrderReview } from "@/orders/review-types.ts";
+export type { WeeklyOrderSelection } from "@/orders/selection-types.ts";
+export {
+  getOrderSelectionState,
+  isSelectableOrderStatus,
+  sumSelectionQty,
+  validateSelectionSavePicks,
+  validateSelectionSubmitPicks,
+} from "@/orders/selection-types.ts";
 export { centsToLabel, formatOrderStatus, formatPaymentSchedule } from "@/orders/review-types.ts";
 
 import { getDb } from "./index.server.ts";
@@ -29,6 +49,14 @@ import {
 } from "./schema/weekly-orders.ts";
 
 const EDITABLE_ORDER_STATUSES: OrderStatus[] = ["pending_customer_review", "changes_requested"];
+
+export type SaveSelectionInput = {
+  orderId: string;
+  userId: string;
+  picks: SelectionPick[];
+};
+
+export type SubmitSelectionInput = SaveSelectionInput;
 
 export type SaveReviewChangesInput = {
   orderId: string;
@@ -86,8 +114,22 @@ export function getOrderEditState(
   return { canEdit: true, canApprove: true, editBlockedReason: null };
 }
 
-async function loadOrderOwnedByUser(orderId: string, userId: string) {
-  const db = getDb();
+type OrderDb = Pick<ReturnType<typeof getDb>, "select" | "delete" | "insert" | "update">;
+
+async function lockWeeklyOrderForUpdate(orderId: string, db: OrderDb): Promise<void> {
+  const [locked] = await db
+    .select({ id: weeklyOrders.id })
+    .from(weeklyOrders)
+    .where(eq(weeklyOrders.id, orderId))
+    .for("update")
+    .limit(1);
+
+  if (!locked) {
+    throw new AuthError("Order not found", "FORBIDDEN");
+  }
+}
+
+async function loadOrderOwnedByUser(orderId: string, userId: string, db: OrderDb = getDb()) {
   const [row] = await db
     .select({
       order: weeklyOrders,
@@ -106,21 +148,106 @@ async function loadOrderOwnedByUser(orderId: string, userId: string) {
   return row;
 }
 
-async function loadOrderMembershipContext(membershipId: string | null): Promise<{
+async function loadBatchMenuContext(
+  batchId: string,
+  db = getDb(),
+): Promise<{
+  batchMenuItemIds: Set<string>;
+  menuById: Map<
+    string,
+    {
+      id: string;
+      name: string;
+      note: string | null;
+      categoryId: string | null;
+      price4ozCents: number | null;
+      price6ozCents: number | null;
+    }
+  >;
+  categoryById: Map<string, { price4ozCents: number; price6ozCents: number }>;
+  batchItemIdByMenuItemId: Map<string, string>;
+}> {
+  const batchMeals = await db
+    .select({
+      batchItemId: batchItems.id,
+      menuItemId: batchItems.menuItemId,
+      menuItemName: menuItems.name,
+      menuItemNote: menuItems.note,
+      categoryId: menuItems.categoryId,
+      price4ozCents: menuItems.price4ozCents,
+      price6ozCents: menuItems.price6ozCents,
+    })
+    .from(batchItems)
+    .innerJoin(menuItems, eq(batchItems.menuItemId, menuItems.id))
+    .where(eq(batchItems.batchId, batchId))
+    .orderBy(menuItems.name);
+
+  const batchMenuItemIds = new Set(batchMeals.map((meal) => meal.menuItemId));
+  const batchItemIdByMenuItemId = new Map(
+    batchMeals.map((meal) => [meal.menuItemId, meal.batchItemId]),
+  );
+  const menuById = new Map(
+    batchMeals.map((meal) => [
+      meal.menuItemId,
+      {
+        id: meal.menuItemId,
+        name: meal.menuItemName,
+        note: meal.menuItemNote,
+        categoryId: meal.categoryId,
+        price4ozCents: meal.price4ozCents,
+        price6ozCents: meal.price6ozCents,
+      },
+    ]),
+  );
+
+  const categoryIds = batchMeals.map((m) => m.categoryId).filter(Boolean) as string[];
+  const categories =
+    categoryIds.length > 0
+      ? await db
+          .select({
+            id: planCategories.id,
+            price4ozCents: planCategories.price4ozCents,
+            price6ozCents: planCategories.price6ozCents,
+          })
+          .from(planCategories)
+          .where(inArray(planCategories.id, categoryIds))
+      : [];
+
+  return {
+    batchMenuItemIds,
+    menuById,
+    categoryById: new Map(categories.map((c) => [c.id, c])),
+    batchItemIdByMenuItemId,
+  };
+}
+
+async function loadOrderMembershipMealsContext(
+  membershipId: string | null,
+  db = getDb(),
+): Promise<{
   membershipPaymentSchedule: PaymentSchedule | null;
   planSlug: string | null;
   planName: string | null;
+  membershipMealsPerWeek: number | null;
+  membershipPortionDefault: Portion | null;
 }> {
   if (!membershipId) {
-    return { membershipPaymentSchedule: null, planSlug: null, planName: null };
+    return {
+      membershipPaymentSchedule: null,
+      planSlug: null,
+      planName: null,
+      membershipMealsPerWeek: null,
+      membershipPortionDefault: null,
+    };
   }
 
-  const db = getDb();
   const [row] = await db
     .select({
       paymentSchedule: memberships.paymentSchedule,
       planSlug: memberships.planSlug,
       planName: planCategories.name,
+      mealsPerWeek: memberships.mealsPerWeek,
+      portionDefault: memberships.portionDefault,
     })
     .from(memberships)
     .leftJoin(planCategories, eq(memberships.planSlug, planCategories.slug))
@@ -128,7 +255,13 @@ async function loadOrderMembershipContext(membershipId: string | null): Promise<
     .limit(1);
 
   if (!row) {
-    return { membershipPaymentSchedule: null, planSlug: null, planName: null };
+    return {
+      membershipPaymentSchedule: null,
+      planSlug: null,
+      planName: null,
+      membershipMealsPerWeek: null,
+      membershipPortionDefault: null,
+    };
   }
 
   const planSlug = row.planSlug ?? null;
@@ -136,11 +269,25 @@ async function loadOrderMembershipContext(membershipId: string | null): Promise<
     membershipPaymentSchedule: row.paymentSchedule,
     planSlug,
     planName: planSlug ? (row.planName ?? planSlug) : null,
+    membershipMealsPerWeek: row.mealsPerWeek,
+    membershipPortionDefault: row.portionDefault,
   };
 }
 
-async function recalculateOrderTotals(orderId: string): Promise<void> {
-  const db = getDb();
+async function loadOrderMembershipContext(membershipId: string | null): Promise<{
+  membershipPaymentSchedule: PaymentSchedule | null;
+  planSlug: string | null;
+  planName: string | null;
+}> {
+  const ctx = await loadOrderMembershipMealsContext(membershipId);
+  return {
+    membershipPaymentSchedule: ctx.membershipPaymentSchedule,
+    planSlug: ctx.planSlug,
+    planName: ctx.planName,
+  };
+}
+
+async function recalculateOrderTotals(orderId: string, db = getDb()): Promise<void> {
   const lines = await db
     .select({
       qty: orderLines.qty,
@@ -173,6 +320,10 @@ export async function listCustomerOrderSummaries(userId: string): Promise<Custom
       externalOrderNumber: weeklyOrders.externalOrderNumber,
       batchWeekStart: weeklyBatches.weekStart,
       reviewDeadline: weeklyBatches.reviewDeadline,
+      selectionDeadline: weeklyBatches.selectionDeadline,
+      batchStatus: weeklyBatches.status,
+      mealsAllowedSnapshot: weeklyOrders.mealsAllowedSnapshot,
+      membershipMealsPerWeek: memberships.mealsPerWeek,
       pickupLabel: pickupWindows.label,
       membershipId: weeklyOrders.membershipId,
       planSlugSnapshot: weeklyOrders.planSlugSnapshot,
@@ -197,6 +348,10 @@ export async function listCustomerOrderSummaries(userId: string): Promise<Custom
       weeklyOrders.externalOrderNumber,
       weeklyBatches.weekStart,
       weeklyBatches.reviewDeadline,
+      weeklyBatches.selectionDeadline,
+      weeklyBatches.status,
+      weeklyOrders.mealsAllowedSnapshot,
+      memberships.mealsPerWeek,
       pickupWindows.label,
       weeklyOrders.membershipId,
       weeklyOrders.planSlugSnapshot,
@@ -212,6 +367,17 @@ export async function listCustomerOrderSummaries(userId: string): Promise<Custom
       planSlugSnapshot: row.planSlugSnapshot,
       membershipPlanSlug: row.membershipPlanSlug,
     });
+    const mealsAllowed = resolveOrderMealsAllowed({
+      mealsAllowedSnapshot: row.mealsAllowedSnapshot,
+      membershipMealsPerWeek: row.membershipMealsPerWeek,
+    });
+    const selectionDeadline = row.selectionDeadline ? row.selectionDeadline.toISOString() : null;
+    const needsSelection = orderNeedsSelection({
+      status: row.status,
+      batchStatus: row.batchStatus,
+      selectionDeadline,
+      mealsAllowed,
+    });
     return {
       id: row.id,
       status: row.status,
@@ -220,8 +386,12 @@ export async function listCustomerOrderSummaries(userId: string): Promise<Custom
       batchWeekStart: String(row.batchWeekStart),
       pickupLabel: row.pickupLabel,
       reviewDeadline: row.reviewDeadline ? row.reviewDeadline.toISOString() : null,
+      selectionDeadline,
       needsReview: EDITABLE_ORDER_STATUSES.includes(row.status),
+      needsSelection,
       itemCount: row.itemCount,
+      mealsAllowed,
+      mealsSelected: row.itemCount,
       receiptNumber: row.receiptNumber,
       externalOrderNumber: row.externalOrderNumber,
       membershipId: row.membershipId,
@@ -558,6 +728,264 @@ export async function saveCustomerReviewChanges(
     throw new Error("Order could not be reloaded after save.");
   }
   return review;
+}
+
+function resolveOrderSelectionEntitlements(
+  order: WeeklyOrder,
+  membershipContext: Awaited<ReturnType<typeof loadOrderMembershipMealsContext>>,
+): { mealsAllowed: number; portion: Portion } {
+  const mealsAllowed = resolveOrderMealsAllowed({
+    mealsAllowedSnapshot: order.mealsAllowedSnapshot,
+    membershipMealsPerWeek: membershipContext.membershipMealsPerWeek,
+  });
+  const portion = resolveOrderPortion({
+    portionSnapshot: order.portionSnapshot,
+    membershipPortionDefault: membershipContext.membershipPortionDefault,
+  });
+
+  if (mealsAllowed == null || mealsAllowed <= 0) {
+    throw new Error("Meal allowance is not available for this order.");
+  }
+  if (!portion) {
+    throw new Error("Portion is not available for this order.");
+  }
+
+  return { mealsAllowed, portion };
+}
+
+/** Meal selection payload for customer-owned selection orders. */
+export async function getOrderSelectionForCustomer(
+  orderId: string,
+  userId: string,
+): Promise<WeeklyOrderSelection | null> {
+  const owned = await loadOrderOwnedByUser(orderId, userId);
+  const { order, batch } = owned;
+  const membershipContext = await loadOrderMembershipMealsContext(order.membershipId);
+
+  const { mealsAllowed, portion } = resolveOrderSelectionEntitlements(order, membershipContext);
+  const menuContext = await loadBatchMenuContext(batch.id);
+
+  let pickupWindow: WeeklyOrderSelection["pickupWindow"] = null;
+  if (order.pickupWindowId) {
+    const db = getDb();
+    const [pw] = await db
+      .select()
+      .from(pickupWindows)
+      .where(eq(pickupWindows.id, order.pickupWindowId))
+      .limit(1);
+    if (pw) {
+      pickupWindow = {
+        id: pw.id,
+        label: pw.label,
+        dayOfWeek: pw.dayOfWeek,
+        timeRange: pw.timeRange,
+        locationName: pw.locationName,
+      };
+    }
+  }
+
+  const db = getDb();
+  const lineRows = await db
+    .select({
+      id: orderLines.id,
+      menuItemId: orderLines.menuItemId,
+      menuItemName: menuItems.name,
+      menuItemNote: menuItems.note,
+      portion: orderLines.portion,
+      qty: orderLines.qty,
+      unitPriceCents: orderLines.unitPriceCents,
+    })
+    .from(orderLines)
+    .innerJoin(menuItems, eq(orderLines.menuItemId, menuItems.id))
+    .where(eq(orderLines.orderId, orderId))
+    .orderBy(orderLines.createdAt);
+
+  const mealsSelected = sumSelectionQty(lineRows);
+  const selectionState = getOrderSelectionState({
+    orderStatus: order.status,
+    batchStatus: batch.status,
+    selectionDeadline: batch.selectionDeadline,
+    mealsAllowed,
+  });
+
+  const menuMeals = [...menuContext.menuById.values()].map((meal) => {
+    const category = meal.categoryId
+      ? (menuContext.categoryById.get(meal.categoryId) ?? null)
+      : null;
+    return {
+      batchItemId: menuContext.batchItemIdByMenuItemId.get(meal.id)!,
+      menuItemId: meal.id,
+      menuItemName: meal.name,
+      menuItemNote: meal.note,
+      unitPriceCents: resolveUnitPriceCents(meal, category, portion),
+    };
+  });
+
+  return {
+    order: {
+      id: order.id,
+      status: order.status,
+      subtotalCents: order.subtotalCents,
+      taxCents: order.taxCents,
+      tipCents: order.tipCents,
+      totalCents: order.totalCents,
+      mealsAllowed,
+      mealsSelected,
+      portion,
+      membershipId: order.membershipId,
+      planSlug: resolveOrderPlanSlug({
+        planSlugSnapshot: order.planSlugSnapshot,
+        membershipPlanSlug: membershipContext.planSlug,
+      }),
+      planName: resolveOrderPlanName({
+        planNameSnapshot: order.planNameSnapshot,
+        planSlugSnapshot: order.planSlugSnapshot,
+        membershipPlanSlug: membershipContext.planSlug,
+        membershipPlanName: membershipContext.planName,
+      }),
+      paymentScheduleSnapshot: order.paymentScheduleSnapshot,
+      selectionSubmittedAt: order.selectionSubmittedAt?.toISOString() ?? null,
+    },
+    batch: {
+      id: batch.id,
+      weekStart: String(batch.weekStart),
+      pickupDate: batch.pickupDate ? String(batch.pickupDate) : null,
+      selectionDeadline: batch.selectionDeadline?.toISOString() ?? null,
+      status: batch.status,
+    },
+    pickupWindow,
+    menuMeals,
+    lines: lineRows.map((line) => ({
+      id: line.id,
+      menuItemId: line.menuItemId,
+      menuItemName: line.menuItemName,
+      menuItemNote: line.menuItemNote,
+      portion: line.portion,
+      qty: line.qty,
+      unitPriceCents: line.unitPriceCents,
+      lineTotalCents: line.qty * line.unitPriceCents,
+    })),
+    canEdit: selectionState.canEdit,
+    canSubmit:
+      selectionState.canSubmit &&
+      mealsSelected === mealsAllowed &&
+      isSelectableOrderStatus(order.status),
+    editBlockedReason: selectionState.editBlockedReason,
+  };
+}
+
+/** Ordered reads/writes inside persistCustomerSelectionPicks's transaction (documented for tests). */
+export const CUSTOMER_SELECTION_TX_PLAN = [
+  "lock_weekly_order",
+  "re_read_order_and_batch",
+  "read_membership_context",
+  "validate_selection_editable",
+  "validate_picks",
+  "replace_order_lines",
+  "recalculate_totals",
+  "update_selection_status",
+] as const;
+
+async function persistCustomerSelectionPicks(
+  input: SaveSelectionInput,
+  mode: "save" | "submit",
+): Promise<void> {
+  const { orderId, userId, picks } = input;
+  const db = getDb();
+
+  await db.transaction(async (tx) => {
+    await lockWeeklyOrderForUpdate(orderId, tx);
+    const owned = await loadOrderOwnedByUser(orderId, userId, tx);
+    const { order, batch } = owned;
+    const membershipContext = await loadOrderMembershipMealsContext(order.membershipId, tx);
+    const { mealsAllowed, portion } = resolveOrderSelectionEntitlements(order, membershipContext);
+    const menuContext = await loadBatchMenuContext(batch.id, tx);
+
+    const selectionState = getOrderSelectionState({
+      orderStatus: order.status,
+      batchStatus: batch.status,
+      selectionDeadline: batch.selectionDeadline,
+      mealsAllowed,
+    });
+
+    if (!selectionState.canEdit) {
+      throw new Error(selectionState.editBlockedReason ?? "This order cannot be edited.");
+    }
+
+    if (mode === "submit") {
+      validateSelectionSubmitPicks(picks, mealsAllowed, menuContext.batchMenuItemIds);
+    } else {
+      validateSelectionSavePicks(picks, mealsAllowed, menuContext.batchMenuItemIds);
+    }
+
+    const positivePicks = picks.filter((pick) => pick.qty > 0);
+    await tx.delete(orderLines).where(eq(orderLines.orderId, orderId));
+
+    for (const pick of positivePicks) {
+      const menuItem = menuContext.menuById.get(pick.menuItemId);
+      if (!menuItem) {
+        throw new Error("Selected meal is not on this week's menu.");
+      }
+
+      const category = menuItem.categoryId
+        ? (menuContext.categoryById.get(menuItem.categoryId) ?? null)
+        : null;
+      const unitPriceCents = resolveUnitPriceCents(menuItem, category, portion);
+
+      await tx.insert(orderLines).values({
+        id: randomUUID(),
+        orderId,
+        menuItemId: pick.menuItemId,
+        portion,
+        qty: pick.qty,
+        unitPriceCents,
+        source: "customer_requested",
+      });
+    }
+
+    await recalculateOrderTotals(orderId, tx);
+
+    const now = new Date();
+    if (mode === "submit") {
+      await tx
+        .update(weeklyOrders)
+        .set({
+          status: resolveSelectionSubmitStatus(),
+          selectionSubmittedAt: now,
+        })
+        .where(eq(weeklyOrders.id, orderId));
+      return;
+    }
+
+    const nextStatus = resolveSelectionSaveStatus(order.status);
+    if (nextStatus !== order.status) {
+      await tx.update(weeklyOrders).set({ status: nextStatus }).where(eq(weeklyOrders.id, orderId));
+    }
+  });
+}
+
+/** Save partial meal picks during the selection window. */
+export async function saveCustomerSelection(
+  input: SaveSelectionInput,
+): Promise<WeeklyOrderSelection> {
+  await persistCustomerSelectionPicks(input, "save");
+  const selection = await getOrderSelectionForCustomer(input.orderId, input.userId);
+  if (!selection) {
+    throw new Error("Order could not be reloaded after save.");
+  }
+  return selection;
+}
+
+/** Submit a completed meal selection (exact meals_allowed qty required). */
+export async function submitCustomerSelection(
+  input: SubmitSelectionInput,
+): Promise<WeeklyOrderSelection> {
+  await persistCustomerSelectionPicks(input, "submit");
+  const selection = await getOrderSelectionForCustomer(input.orderId, input.userId);
+  if (!selection) {
+    throw new Error("Order could not be reloaded after submit.");
+  }
+  return selection;
 }
 
 /** Approve a weekly order — snapshots payment schedule; no Stripe charge in Sprint B. */

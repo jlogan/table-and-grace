@@ -2,6 +2,8 @@ import type { PaymentSchedule } from "@/db/schema/payment-schedules.ts";
 import type { OrderStatus } from "@/db/schema/weekly-orders.ts";
 import type { Portion } from "@/db/schema/order-lines.ts";
 
+import { getOrderSelectionState, isSelectableOrderStatus } from "./selection-types.ts";
+
 export type CustomerOrderSummary = {
   id: string;
   status: OrderStatus;
@@ -10,8 +12,12 @@ export type CustomerOrderSummary = {
   batchWeekStart: string;
   pickupLabel: string | null;
   reviewDeadline: string | null;
+  selectionDeadline: string | null;
   needsReview: boolean;
+  needsSelection: boolean;
   itemCount: number;
+  mealsAllowed: number | null;
+  mealsSelected: number;
   receiptNumber: string | null;
   externalOrderNumber: string | null;
   membershipId: string | null;
@@ -128,15 +134,28 @@ export function formatPaymentSchedule(schedule: PaymentSchedule): string {
   return labels[schedule] ?? schedule;
 }
 
+export function orderNeedsSelection(input: {
+  status: OrderStatus;
+  batchStatus: string;
+  selectionDeadline: string | null;
+  mealsAllowed: number | null;
+}): boolean {
+  const selectionDeadline = input.selectionDeadline ? new Date(input.selectionDeadline) : null;
+  const { canEdit } = getOrderSelectionState({
+    orderStatus: input.status,
+    batchStatus: input.batchStatus,
+    selectionDeadline,
+    mealsAllowed: input.mealsAllowed,
+  });
+  return canEdit && isSelectableOrderStatus(input.status);
+}
+
 export function orderStatusBadgeVariant(
   status: OrderStatus,
 ): "default" | "secondary" | "destructive" | "outline" {
   if (status === "pending_customer_review" || status === "changes_requested") return "default";
-  if (
-    status === "awaiting_selection" ||
-    status === "selection_in_progress" ||
-    status === "selection_submitted"
-  ) {
+  if (status === "awaiting_selection" || status === "selection_in_progress") return "default";
+  if (status === "selection_submitted") {
     return "outline";
   }
   if (status === "payment_failed") return "destructive";
