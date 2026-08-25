@@ -239,14 +239,31 @@ function AdminBatchesPage() {
   const showPlanningMembers = mode === "create" || (mode === "detail" && canEditInventory);
 
   const loadPlanningContext = useCallback(async () => {
-    try {
-      const [members, lastAddedRows] = await Promise.all([planningMembersFn(), lastBatchAddedFn()]);
-      setPlanningMembers(members);
-      setLastBatchAddedByMenuItemId(
-        new Map(lastAddedRows.map((row) => [row.menuItemId, row.lastAddedAt])),
+    const [membersResult, lastAddedResult] = await Promise.allSettled([
+      planningMembersFn(),
+      lastBatchAddedFn(),
+    ]);
+
+    if (membersResult.status === "fulfilled") {
+      setPlanningMembers(membersResult.value);
+    } else {
+      setError(
+        membersResult.reason instanceof Error
+          ? membersResult.reason.message
+          : "Could not load members due for items.",
       );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load batch planning context.");
+    }
+
+    if (lastAddedResult.status === "fulfilled") {
+      setLastBatchAddedByMenuItemId(
+        new Map(lastAddedResult.value.map((row) => [row.menuItemId, row.lastAddedAt])),
+      );
+    } else if (membersResult.status === "fulfilled") {
+      setError(
+        lastAddedResult.reason instanceof Error
+          ? lastAddedResult.reason.message
+          : "Could not load last batch dates.",
+      );
     }
   }, [lastBatchAddedFn, planningMembersFn]);
 

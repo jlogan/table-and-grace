@@ -21,6 +21,24 @@ export function toIsoDateString(value: Date | string | null | undefined): string
   return parsed.toISOString().slice(0, 10);
 }
 
+/** Serialize MySQL datetime / Date values to ISO 8601 for API payloads. */
+export function toIsoDateTimeString(value: Date | string | null | undefined): string | null {
+  if (value == null) return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
+  const parsed = parseISO(normalized);
+  if (!isValid(parsed)) return null;
+
+  return parsed.toISOString();
+}
+
 function parseDateValue(value: string): Date | null {
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
     ? parseISO(`${value}T12:00:00`)

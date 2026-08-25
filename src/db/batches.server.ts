@@ -10,7 +10,7 @@ import type {
   AdminPickupWindowOption,
 } from "@/orders/admin-types.ts";
 
-import { toIsoDateString } from "@/lib/dates.ts";
+import { toIsoDateString, toIsoDateTimeString } from "@/lib/dates.ts";
 import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
 import {
   buildSelectionOrderSnapshots,
@@ -156,9 +156,9 @@ export async function listAdminBatches(): Promise<AdminBatchSummary[]> {
     weekStart: toIsoDateString(row.weekStart) ?? "",
     pickupDate: toIsoDateString(row.pickupDate),
     status: row.status,
-    reviewDeadline: row.reviewDeadline?.toISOString() ?? null,
-    selectionDeadline: row.selectionDeadline?.toISOString() ?? null,
-    chargeScheduledAt: row.chargeScheduledAt?.toISOString() ?? null,
+    reviewDeadline: toIsoDateTimeString(row.reviewDeadline),
+    selectionDeadline: toIsoDateTimeString(row.selectionDeadline),
+    chargeScheduledAt: toIsoDateTimeString(row.chargeScheduledAt),
     pickupWindowLabel: row.pickupWindowLabel,
     orderCount: row.orderCount,
     itemCount: row.itemCount,
@@ -401,7 +401,7 @@ export type ActiveMembershipRow = {
   dietaryTags: string[] | null;
   portionDefault: Portion;
   membershipPaymentSchedule: PaymentSchedule;
-  profilePaymentSchedule: PaymentSchedule;
+  profilePaymentSchedule: PaymentSchedule | null;
   defaultPickupWindowId: string | null;
 };
 
@@ -430,7 +430,7 @@ export function classifyActiveMembershipRows(rows: ActiveMembershipRow[]): {
       mealsPerWeek: resolvedMeals,
       portionDefault: row.portionDefault,
       membershipPaymentSchedule: row.membershipPaymentSchedule,
-      profilePaymentSchedule: row.profilePaymentSchedule,
+      profilePaymentSchedule: row.profilePaymentSchedule ?? "weekly_autopay",
       defaultPickupWindowId: row.defaultPickupWindowId,
     });
   }
@@ -510,7 +510,7 @@ export async function getMenuItemsLastBatchAdded(): Promise<
 
   return rows.map((row) => ({
     menuItemId: row.menuItemId,
-    lastAddedAt: row.lastAddedAt?.toISOString() ?? null,
+    lastAddedAt: toIsoDateTimeString(row.lastAddedAt),
   }));
 }
 
@@ -541,7 +541,7 @@ export async function listPublishEligibleMembers(
     })
     .from(memberships)
     .innerJoin(users, eq(memberships.userId, users.id))
-    .innerJoin(customerProfiles, eq(memberships.userId, customerProfiles.userId))
+    .leftJoin(customerProfiles, eq(memberships.userId, customerProfiles.userId))
     .leftJoin(planCategories, eq(memberships.planSlug, planCategories.slug))
     .where(eq(memberships.status, "active"))
     .orderBy(asc(users.email), asc(memberships.id));
@@ -899,7 +899,7 @@ export async function listAdminOrders(batchId?: string): Promise<AdminOrderRow[]
       itemCount: row.itemCount,
       pickupLabel: row.pickupLabel,
       customerVisibleNote: row.customerVisibleNote,
-      reviewDeadline: row.reviewDeadline?.toISOString() ?? null,
+      reviewDeadline: toIsoDateTimeString(row.reviewDeadline),
       membershipId: row.membershipId,
       planSlug,
       planName: resolveOrderPlanName({
