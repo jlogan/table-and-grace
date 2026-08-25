@@ -9,13 +9,6 @@ import { useMemberQuickViewData } from "@/components/admin/use-member-quick-view
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
   Table,
   TableBody,
   TableCell,
@@ -27,34 +20,41 @@ import { formatDateString } from "@/lib/dates";
 import { customerFullName } from "@/lib/customer-names";
 import { centsToLabel, formatOrderStatus, orderStatusBadgeVariant } from "@/orders/review-types";
 
-type MemberQuickViewSheetProps = {
+type MemberQuickViewPanelProps = {
   userId: string | null;
   memberLabel: string | null;
-  onOpenChange: (open: boolean) => void;
+  compact?: boolean;
 };
 
-export function MemberQuickViewSheet({
+export function MemberQuickViewPanel({
   userId,
   memberLabel,
-  onOpenChange,
-}: MemberQuickViewSheetProps) {
+  compact = false,
+}: MemberQuickViewPanelProps) {
   const { customer, likedItems, loading, error } = useMemberQuickViewData(userId);
 
-  const open = Boolean(userId);
+  if (!userId) {
+    return (
+      <div className="rounded-md border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+        Select a member to view profile, preferences, and order history.
+      </div>
+    );
+  }
+
   const displayName = customer ? customerFullName(customer) || customer.email : memberLabel;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>{displayName ?? "Member profile"}</SheetTitle>
-          <SheetDescription>
-            Quick view for batch planning — preferences, orders, and liked items.
-          </SheetDescription>
-        </SheetHeader>
+    <div className="rounded-md border border-border bg-muted/20">
+      <div className="border-b border-border px-4 py-3">
+        <p className="text-sm font-medium">{displayName ?? "Member profile"}</p>
+        <p className="text-xs text-muted-foreground">
+          Preferences, past orders, and liked items for order-building.
+        </p>
+      </div>
 
+      <div className={compact ? "max-h-[420px] space-y-4 overflow-y-auto p-4" : "space-y-4 p-4"}>
         {loading ? (
-          <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
             Loading profile…
           </div>
@@ -63,13 +63,13 @@ export function MemberQuickViewSheet({
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         {customer && !loading ? (
-          <div className="mt-4 space-y-6 pb-6">
+          <>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Email
                 </p>
-                <p>{customer.email}</p>
+                <p className="truncate">{customer.email}</p>
               </div>
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -109,7 +109,7 @@ export function MemberQuickViewSheet({
                 <p className="text-sm text-muted-foreground">No order history yet.</p>
               ) : (
                 <ul className="space-y-1 text-sm">
-                  {likedItems.map((item) => (
+                  {likedItems.slice(0, compact ? 5 : 8).map((item) => (
                     <li key={item.menuItemId} className="flex justify-between gap-4">
                       <span className="truncate">{item.menuItemName}</span>
                       <span className="shrink-0 tabular-nums text-muted-foreground">
@@ -135,9 +135,9 @@ export function MemberQuickViewSheet({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {customer.orders.slice(0, 8).map((order) => (
+                    {customer.orders.slice(0, compact ? 4 : 8).map((order) => (
                       <TableRow key={order.id}>
-                        <TableCell>
+                        <TableCell className="text-xs">
                           {order.batchWeekStart
                             ? formatDateString(order.batchWeekStart, "MMM d, yyyy")
                             : "—"}
@@ -147,7 +147,7 @@ export function MemberQuickViewSheet({
                             {formatOrderStatus(order.status)}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right tabular-nums">
+                        <TableCell className="text-right tabular-nums text-xs">
                           {centsToLabel(order.totalCents)}
                         </TableCell>
                       </TableRow>
@@ -157,14 +157,14 @@ export function MemberQuickViewSheet({
               )}
             </div>
 
-            <Button variant="outline" asChild className="w-full">
+            <Button variant="outline" size="sm" asChild className="w-full">
               <Link to="/admin/customers/$customerId" params={{ customerId: customer.userId }}>
                 Open full profile
               </Link>
             </Button>
-          </div>
+          </>
         ) : null}
-      </SheetContent>
-    </Sheet>
+      </div>
+    </div>
   );
 }

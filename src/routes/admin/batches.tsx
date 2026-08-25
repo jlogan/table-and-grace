@@ -9,7 +9,13 @@ import { requireRoleMiddleware } from "@/auth/middleware.server";
 import { listPublishEligibleMembers, type PublishEligibility } from "@/db/batches.server";
 import { getBatchProjectedMealDemand } from "@/db/customers.server";
 
+import { MemberOrderItemPicker } from "@/components/admin/member-order-item-picker";
+import { MemberQuickViewPanel } from "@/components/admin/member-quick-view-panel";
 import { MemberQuickViewSheet } from "@/components/admin/member-quick-view-sheet";
+import {
+  MenuItemCreateDialog,
+  type MenuItemCreateInput,
+} from "@/components/admin/menu-item-create-dialog";
 import { WeeklyMenuPicker } from "@/components/admin/weekly-menu-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +45,7 @@ import {
   createAdminMenuItemRecord,
   fetchActiveMenuItemsForAdmin,
   fetchAdminBatches,
+  fetchAdminPlanCategoriesWithId,
   fetchBatchDraftOrderSummaries,
   fetchBatchInventory,
   fetchBatchMealDemand,
@@ -103,17 +110,32 @@ function localDatetimeToIso(value: string): string {
   return new Date(value).toISOString();
 }
 
+function memberDraftProgressLabel(
+  member: BatchPlanningMemberRow,
+  summary: BatchDraftOrderSummaryRow | undefined,
+): { label: string; complete: boolean } {
+  if (!summary || summary.mealCount <= 0) {
+    return { label: "Not started", complete: false };
+  }
+  const meetsAllowance = member.mealsPerWeek <= 0 || summary.mealCount >= member.mealsPerWeek;
+  return {
+    label: `${summary.mealCount} meal(s)${member.mealsPerWeek > 0 ? ` / ${member.mealsPerWeek}` : ""}`,
+    complete: meetsAllowance,
+  };
+}
+
 function memberLabel(member: BatchPlanningMemberRow): string {
   return member.name?.trim() || member.email;
 }
 
 export const Route = createFileRoute("/admin/batches")({
   beforeLoad: async () => {
-    const [batches, menuItems] = await Promise.all([
+    const [batches, menuItems, planCategories] = await Promise.all([
       fetchAdminBatches(),
       fetchActiveMenuItemsForAdmin(),
+      fetchAdminPlanCategoriesWithId(),
     ]);
-    return { batches, menuItems };
+    return { batches, menuItems, planCategories };
   },
   head: () => ({
     meta: [{ title: "Batches — GOFOFA Ops" }],
@@ -122,7 +144,11 @@ export const Route = createFileRoute("/admin/batches")({
 });
 
 function AdminBatchesPage() {
-  const { batches: initialBatches, menuItems: initialMenuItems } = Route.useRouteContext();
+  const {
+    batches: initialBatches,
+    menuItems: initialMenuItems,
+    planCategories,
+  } = Route.useRouteContext();
   const createFn = useServerFn(createAdminWeeklyBatch);
   const createMenuItemFn = useServerFn(createAdminMenuItemRecord);
   const inventoryFn = useServerFn(fetchBatchInventory);
@@ -154,6 +180,11 @@ function AdminBatchesPage() {
   const [quickViewUserId, setQuickViewUserId] = useState<string | null>(null);
   const [quickViewLabel, setQuickViewLabel] = useState<string | null>(null);
   const [creatingMenuItem, setCreatingMenuItem] = useState(false);
+  const [menuItemDialogOpen, setMenuItemDialogOpen] = useState(false);
+  const [menuItemDialogInitialName, setMenuItemDialogInitialName] = useState("");
+  const [menuItemDialogTarget, setMenuItemDialogTarget] = useState<
+    "catalog" | "member-order" | null
+  >(null);
   const [catalogMenuItemIds, setCatalogMenuItemIds] = useState<Set<string>>(new Set());
   const [createSelectedMenuItemIds, setCreateSelectedMenuItemIds] = useState<Set<string>>(
     new Set(),
@@ -228,6 +259,33 @@ function AdminBatchesPage() {
     () => new Set(draftSummaries.map((summary) => summary.membershipId)),
     [draftSummaries],
   );
+  const draftSummaryByMembershipId = useMemo(
+    () => new Map(draftSummaries.map((summary) => [summary.membershipId, summary])),
+    [draftSummaries],
+  );
+  const memberDraftLineByMenuItemId = useMemo(
+    () => new Map((memberDraft?.lines ?? []).map((line) => [line.menuItemId, line])),
+    [memberDraft],
+  );
+  const savedCatalogMenuItemIds = useMemo(
+    () => new Set(inventory.filter((row) => row.batchItemId).map((row) => row.menuItemId)),
+    [inventory],
+  );
+  const activeOrderLines = useMemo(() => {
+    return Object.entries(orderLineDraft)
+      .filter(([, qty]) => qty > 0)
+      .map(([menuItemId, qty]) => {
+        const draftLine = memberDraftLineByMenuItemId.get(menuItemId);
+        return {
+          menuItemId,
+          menuItemName:
+            draftLine?.menuItemName ?? menuItemNameById.get(menuItemId) ?? "Unknown item",
+          unitPriceCents: draftLine?.unitPriceCents ?? 0,
+          qty,
+        };
+      })
+      .sort((a, b) => a.menuItemName.localeCompare(b.menuItemName));
+  }, [memberDraftLineByMenuItemId, menuItemNameById, orderLineDraft]);
   const openMenuBlockReasons: string[] = [];
   if (!canEditBatch) {
     openMenuBlockReasons.push("Batch is not in planning or draft.");
@@ -279,6 +337,74 @@ function AdminBatchesPage() {
     }
   }, [loadPlanningContext, showPlanningMembers]);
 
+  async function persistCatalogIfNeeded(menuItemIds: string[]): Promise<boolean> {
+    if (!selectedBatchId) return false;
+    const needsSave = menuItemIds.some((id) => !savedCatalogMenuItemIds.has(id));
+    if (!needsSave) return false;
+
+    const nextCatalogIds = new Set(catalogMenuItemIds);
+    for (const id of menuItemIds) {
+      nextCatalogIds.add(id);
+    }
+
+    const rows = await saveCatalogFn({
+      data: {
+        batchId: selectedBatchId,
+        menuItemIds: [...nextCatalogIds],
+      },
+    });
+    setInventory(rows);
+    setCatalogMenuItemIds(
+      new Set(rows.filter((row) => row.batchItemId).map((row) => row.menuItemId)),
+    );
+    return true;
+  }
+
+  function openMenuItemCreateDialog(name: string, target: "catalog" | "member-order") {
+    setMenuItemDialogInitialName(name);
+    setMenuItemDialogTarget(target);
+    setMenuItemDialogOpen(true);
+  }
+
+  async function handleCreateMenuItemFromDialog(data: MenuItemCreateInput) {
+    setCreatingMenuItem(true);
+    setError(null);
+    try {
+      const result = await createMenuItemFn({ data });
+      const newItem: AdminMenuItemOption = {
+        id: result.id,
+        name: data.name.trim(),
+        note: data.note?.trim() ?? null,
+      };
+      setMenuItems((prev) => [...prev, newItem].sort((a, b) => a.name.localeCompare(b.name)));
+
+      if (menuItemDialogTarget === "catalog" || mode === "create") {
+        if (mode === "create") {
+          setCreateSelectedMenuItemIds((prev) => new Set(prev).add(result.id));
+        } else {
+          setCatalogMenuItemIds((prev) => new Set(prev).add(result.id));
+        }
+      }
+
+      if (menuItemDialogTarget === "member-order" && selectedBatchId && selectedMembershipId) {
+        setCatalogMenuItemIds((prev) => new Set(prev).add(result.id));
+        await persistCatalogIfNeeded([result.id]);
+        await loadMemberDraft(selectedBatchId, selectedMembershipId);
+        setOrderLineDraft((prev) => ({
+          ...prev,
+          [result.id]: Math.max(1, prev[result.id] ?? 0),
+        }));
+      }
+
+      setMenuItemDialogOpen(false);
+      setMenuItemDialogTarget(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create menu item.");
+    } finally {
+      setCreatingMenuItem(false);
+    }
+  }
+
   async function handleCreateNewMenuItem(name: string) {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -292,6 +418,11 @@ function AdminBatchesPage() {
       } else {
         setCatalogMenuItemIds((prev) => new Set(prev).add(existing.id));
       }
+      return;
+    }
+
+    if (mode === "detail" && canEditBatch) {
+      openMenuItemCreateDialog(trimmed, "catalog");
       return;
     }
 
@@ -311,6 +442,33 @@ function AdminBatchesPage() {
     } finally {
       setCreatingMenuItem(false);
     }
+  }
+
+  async function handleAddItemToMemberOrder(menuItemId: string) {
+    if (!selectedBatchId || !selectedMembershipId) return;
+    setError(null);
+
+    try {
+      setCatalogMenuItemIds((prev) => new Set(prev).add(menuItemId));
+      const catalogSaved = await persistCatalogIfNeeded([menuItemId]);
+      if (catalogSaved) {
+        await loadMemberDraft(selectedBatchId, selectedMembershipId);
+      }
+      setOrderLineDraft((prev) => ({
+        ...prev,
+        [menuItemId]: (prev[menuItemId] ?? 0) + 1,
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add item to order.");
+    }
+  }
+
+  function handleRemoveItemFromMemberOrder(menuItemId: string) {
+    setOrderLineDraft((prev) => {
+      const next = { ...prev };
+      delete next[menuItemId];
+      return next;
+    });
   }
 
   function openMemberQuickView(member: BatchPlanningMemberRow) {
@@ -473,6 +631,18 @@ function AdminBatchesPage() {
     setError(null);
     setMessage(null);
     try {
+      const lineMenuItemIds = Object.entries(orderLineDraft)
+        .filter(([, qty]) => qty > 0)
+        .map(([menuItemId]) => menuItemId);
+      if (lineMenuItemIds.length > 0) {
+        setCatalogMenuItemIds((prev) => {
+          const next = new Set(prev);
+          for (const id of lineMenuItemIds) next.add(id);
+          return next;
+        });
+        await persistCatalogIfNeeded(lineMenuItemIds);
+      }
+
       const lines = Object.entries(orderLineDraft)
         .filter(([, qty]) => qty > 0)
         .map(([menuItemId, qty]) => ({ menuItemId, qty }));
@@ -841,49 +1011,14 @@ function AdminBatchesPage() {
             </CardHeader>
           </Card>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          {!canEditBatch ? (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Order-building progress</CardTitle>
-                <CardDescription>
-                  {canEditBatch
-                    ? `${draftSummaries.length} saved draft order(s) · ${catalogItemCount} menu item(s) in batch`
-                    : "Generated and finalized orders for this batch"}
-                </CardDescription>
+                <CardTitle className="text-base">Batch meal demand</CardTitle>
+                <CardDescription>Generated and finalized orders for this batch</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {canEditBatch ? (
-                  <>
-                    <div className="grid gap-2 text-sm sm:grid-cols-2">
-                      <div className="rounded-md border border-border px-3 py-2">
-                        <p className="text-muted-foreground">Draft orders saved</p>
-                        <p className="font-medium tabular-nums">{draftSummaries.length}</p>
-                      </div>
-                      <div className="rounded-md border border-border px-3 py-2">
-                        <p className="text-muted-foreground">Eligible members</p>
-                        <p className="font-medium tabular-nums">{eligibleCount}</p>
-                      </div>
-                    </div>
-                    {draftSummaries.length > 0 ? (
-                      <ul className="space-y-1 text-sm">
-                        {draftSummaries.slice(0, 6).map((summary) => (
-                          <li key={summary.orderId} className="flex justify-between gap-4">
-                            <span className="truncate">
-                              {summary.customerName?.trim() || summary.customerEmail}
-                            </span>
-                            <span className="shrink-0 tabular-nums text-muted-foreground">
-                              {summary.mealCount} meal(s)
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No draft orders yet — select a member below to start building.
-                      </p>
-                    )}
-                  </>
-                ) : mealDemand.filter((r) => r.qtyNeeded > 0 || r.qtyCooked > 0).length === 0 ? (
+                {mealDemand.filter((r) => r.qtyNeeded > 0 || r.qtyCooked > 0).length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No meal demand recorded for this batch yet.
                   </p>
@@ -891,7 +1026,7 @@ function AdminBatchesPage() {
                   <ul className="space-y-2 text-sm">
                     {mealDemand
                       .filter((r) => r.qtyNeeded > 0 || r.qtyCooked > 0)
-                      .slice(0, 8)
+                      .slice(0, 12)
                       .map((row) => {
                         const shortage = Math.max(0, row.qtyNeeded - row.qtyCooked);
                         return (
@@ -906,158 +1041,248 @@ function AdminBatchesPage() {
                       })}
                   </ul>
                 )}
-                {unresolvedMembers.length > 0 ? (
-                  <p className="text-sm text-destructive">
-                    {unresolvedMembers.length} active membership
-                    {unresolvedMembers.length === 1 ? "" : "s"} missing meals per week.
-                  </p>
-                ) : null}
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Generate orders</CardTitle>
-                <CardDescription>
-                  Validates pricing and membership plans, then creates customer-review orders from
-                  saved drafts and updates batch quantities.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button
-                  onClick={handleGenerateOrders}
-                  disabled={!canGenerateOrders || generatingOrders || loadingInventory}
-                >
-                  {generatingOrders ? "Generating…" : "Generate orders"}
-                </Button>
-                {!canEditBatch ? (
-                  <p className="text-sm text-muted-foreground">
-                    This batch is no longer in planning — orders cannot be generated.
-                  </p>
-                ) : draftSummaries.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Save at least one member draft order before generating.
-                  </p>
-                ) : null}
-                {excludedInactiveCount > 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    {excludedInactiveCount} paused or cancelled membership
-                    {excludedInactiveCount === 1 ? "" : "s"} excluded.
-                  </p>
-                ) : null}
-              </CardContent>
-            </Card>
-          </div>
+          ) : null}
 
           {canEditBatch ? (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Build member order</CardTitle>
                 <CardDescription>
-                  Select a member, assign quantities from this batch&apos;s menu, and save to return
-                  later. Drafts are stored as weekly orders until you generate.
+                  Select a member, add items from the catalog, and save drafts incrementally. Review
+                  progress across all members before generating orders.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                  <div className="space-y-2">
-                    <Label htmlFor="member-select">Member</Label>
-                    <Select
-                      value={selectedMembershipId ?? undefined}
-                      onValueChange={(value) => void handleSelectMember(value)}
-                      disabled={loadingInventory || planningMembers.length === 0}
-                    >
-                      <SelectTrigger id="member-select" className="w-full max-w-md">
-                        <SelectValue placeholder="Choose a member…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {planningMembers.map((member) => (
-                          <SelectItem key={member.membershipId} value={member.membershipId}>
-                            {memberLabel(member)}
-                            {draftMemberIds.has(member.membershipId) ? " · draft saved" : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {selectedMember ? (
-                    <div className="text-sm text-muted-foreground">
-                      <p>{selectedMember.planName ?? "No plan"}</p>
-                      <p>
-                        {selectedMember.mealsPerWeek} meals/wk ·{" "}
-                        {formatPortionLabel(selectedMember.portionDefault)}
-                      </p>
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-start">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="member-select">Member</Label>
+                      <Select
+                        value={selectedMembershipId ?? undefined}
+                        onValueChange={(value) => void handleSelectMember(value)}
+                        disabled={loadingInventory || planningMembers.length === 0}
+                      >
+                        <SelectTrigger id="member-select" className="w-full">
+                          <SelectValue placeholder="Choose a member…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {planningMembers.map((member) => (
+                            <SelectItem key={member.membershipId} value={member.membershipId}>
+                              {memberLabel(member)}
+                              {draftMemberIds.has(member.membershipId) ? " · draft saved" : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  ) : null}
+
+                    {selectedMember ? (
+                      <div className="text-sm text-muted-foreground">
+                        <p>{selectedMember.planName ?? "No plan"}</p>
+                        <p>
+                          {selectedMember.mealsPerWeek} meals/wk ·{" "}
+                          {formatPortionLabel(selectedMember.portionDefault)}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {!selectedMember ? (
+                      <p className="text-sm text-muted-foreground">
+                        Choose a member to start building their order.
+                      </p>
+                    ) : loadingMemberDraft ? (
+                      <p className="text-sm text-muted-foreground">Loading order draft…</p>
+                    ) : (
+                      <>
+                        <MemberOrderItemPicker
+                          menuItems={menuItems}
+                          disabled={loadingMemberDraft || savingMemberDraft}
+                          lastBatchAddedByMenuItemId={lastBatchAddedByMenuItemId}
+                          onSelect={(menuItemId) => void handleAddItemToMemberOrder(menuItemId)}
+                          onRequestCreateNew={(name) =>
+                            openMenuItemCreateDialog(name, "member-order")
+                          }
+                        />
+
+                        {activeOrderLines.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No items in this order yet — search above to add meals.
+                          </p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Menu item</TableHead>
+                                  <TableHead className="w-[120px] text-right">Unit price</TableHead>
+                                  <TableHead className="w-[120px] text-right">Quantity</TableHead>
+                                  <TableHead className="w-[56px]" />
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {activeOrderLines.map((line) => (
+                                  <TableRow key={line.menuItemId}>
+                                    <TableCell>{line.menuItemName}</TableCell>
+                                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                                      {line.unitPriceCents > 0
+                                        ? centsToLabel(line.unitPriceCents)
+                                        : "No price"}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        max={999}
+                                        className="ml-auto w-24 text-right tabular-nums"
+                                        value={orderLineDraft[line.menuItemId] ?? 0}
+                                        onChange={(e) => {
+                                          const qty = Number(e.target.value) || 0;
+                                          setOrderLineDraft((prev) => ({
+                                            ...prev,
+                                            [line.menuItemId]: qty,
+                                          }));
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label={`Remove ${line.menuItemName}`}
+                                        onClick={() =>
+                                          handleRemoveItemFromMemberOrder(line.menuItemId)
+                                        }
+                                      >
+                                        <X className="size-4" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-4">
+                          <Button
+                            onClick={handleSaveMemberDraft}
+                            disabled={savingMemberDraft || loadingMemberDraft}
+                          >
+                            {savingMemberDraft ? "Saving…" : "Save member draft"}
+                          </Button>
+                          <p className="text-sm text-muted-foreground">
+                            {draftMealTotal} meal(s) selected
+                            {selectedMember.mealsPerWeek > 0
+                              ? ` · allowance ${selectedMember.mealsPerWeek}/wk`
+                              : ""}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <MemberQuickViewPanel
+                    userId={selectedMember?.userId ?? null}
+                    memberLabel={selectedMember ? memberLabel(selectedMember) : null}
+                    compact
+                  />
                 </div>
 
-                {!selectedMember ? (
-                  <p className="text-sm text-muted-foreground">
-                    Choose a member to start building their order.
-                  </p>
-                ) : loadingMemberDraft ? (
-                  <p className="text-sm text-muted-foreground">Loading order draft…</p>
-                ) : catalogRows.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Add batch menu items below before assigning quantities.
-                  </p>
-                ) : (
-                  <>
+                <div className="space-y-3 rounded-md border border-border p-4">
+                  <div>
+                    <p className="text-sm font-medium">Order-building progress</p>
+                    <p className="text-sm text-muted-foreground">
+                      {draftSummaries.length} saved draft order(s) · {eligibleCount} eligible
+                      member(s) · {catalogItemCount} menu item(s) in batch
+                    </p>
+                  </div>
+                  <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="rounded-md border border-border px-3 py-2">
+                      <p className="text-muted-foreground">Draft orders saved</p>
+                      <p className="font-medium tabular-nums">{draftSummaries.length}</p>
+                    </div>
+                    <div className="rounded-md border border-border px-3 py-2">
+                      <p className="text-muted-foreground">Eligible members</p>
+                      <p className="font-medium tabular-nums">{eligibleCount}</p>
+                    </div>
+                    <div className="rounded-md border border-border px-3 py-2">
+                      <p className="text-muted-foreground">Batch menu items</p>
+                      <p className="font-medium tabular-nums">{catalogItemCount}</p>
+                    </div>
+                  </div>
+                  {planningMembers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No eligible active members yet.</p>
+                  ) : (
                     <div className="overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Menu item</TableHead>
-                            <TableHead className="w-[120px] text-right">Unit price</TableHead>
-                            <TableHead className="w-[140px] text-right">Quantity</TableHead>
+                            <TableHead>Member</TableHead>
+                            <TableHead>Plan</TableHead>
+                            <TableHead className="text-right">Allowance</TableHead>
+                            <TableHead>Progress</TableHead>
+                            <TableHead className="w-[100px]" />
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {(memberDraft?.lines ?? []).map((line) => (
-                            <TableRow key={line.menuItemId}>
-                              <TableCell>{line.menuItemName}</TableCell>
-                              <TableCell className="text-right tabular-nums text-muted-foreground">
-                                {line.unitPriceCents > 0
-                                  ? centsToLabel(line.unitPriceCents)
-                                  : "No price"}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  max={999}
-                                  className="ml-auto w-24 text-right tabular-nums"
-                                  value={orderLineDraft[line.menuItemId] ?? 0}
-                                  onChange={(e) => {
-                                    const qty = Number(e.target.value) || 0;
-                                    setOrderLineDraft((prev) => ({
-                                      ...prev,
-                                      [line.menuItemId]: qty,
-                                    }));
-                                  }}
-                                />
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                          {planningMembers.map((member) => {
+                            const summary = draftSummaryByMembershipId.get(member.membershipId);
+                            const progress = memberDraftProgressLabel(member, summary);
+                            const label = memberLabel(member);
+                            return (
+                              <TableRow
+                                key={member.membershipId}
+                                className={
+                                  selectedMembershipId === member.membershipId ? "bg-muted/40" : ""
+                                }
+                              >
+                                <TableCell className="font-medium">{label}</TableCell>
+                                <TableCell className="text-muted-foreground">
+                                  {member.planName ?? "—"}
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                  {member.mealsPerWeek}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={progress.complete ? "default" : "outline"}>
+                                    {progress.label}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={
+                                      selectedMembershipId === member.membershipId
+                                        ? "secondary"
+                                        : "outline"
+                                    }
+                                    onClick={() => void handleSelectMember(member.membershipId)}
+                                  >
+                                    {selectedMembershipId === member.membershipId
+                                      ? "Editing"
+                                      : summary
+                                        ? "Review"
+                                        : "Build"}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>
-                    <div className="flex flex-wrap items-center gap-4">
-                      <Button
-                        onClick={handleSaveMemberDraft}
-                        disabled={savingMemberDraft || loadingMemberDraft}
-                      >
-                        {savingMemberDraft ? "Saving…" : "Save member draft"}
-                      </Button>
-                      <p className="text-sm text-muted-foreground">
-                        {draftMealTotal} meal(s) selected
-                        {selectedMember.mealsPerWeek > 0
-                          ? ` · allowance ${selectedMember.mealsPerWeek}/wk`
-                          : ""}
-                      </p>
-                    </div>
-                  </>
-                )}
+                  )}
+                  {unresolvedMembers.length > 0 ? (
+                    <p className="text-sm text-destructive">
+                      {unresolvedMembers.length} active membership
+                      {unresolvedMembers.length === 1 ? "" : "s"} missing meals per week.
+                    </p>
+                  ) : null}
+                </div>
               </CardContent>
             </Card>
           ) : null}
@@ -1186,8 +1411,51 @@ function AdminBatchesPage() {
               )}
             </CardContent>
           </Card>
+
+          {canEditBatch ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Generate orders</CardTitle>
+                <CardDescription>
+                  Final step — validates pricing and membership plans, then creates customer-review
+                  orders from saved drafts and updates batch quantities.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button
+                  onClick={handleGenerateOrders}
+                  disabled={!canGenerateOrders || generatingOrders || loadingInventory}
+                >
+                  {generatingOrders ? "Generating…" : "Generate orders"}
+                </Button>
+                {draftSummaries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Save at least one member draft order before generating.
+                  </p>
+                ) : null}
+                {excludedInactiveCount > 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {excludedInactiveCount} paused or cancelled membership
+                    {excludedInactiveCount === 1 ? "" : "s"} excluded.
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
         </>
       ) : null}
+
+      <MenuItemCreateDialog
+        open={menuItemDialogOpen}
+        initialName={menuItemDialogInitialName}
+        planCategories={planCategories}
+        saving={creatingMenuItem}
+        onOpenChange={(open) => {
+          setMenuItemDialogOpen(open);
+          if (!open) setMenuItemDialogTarget(null);
+        }}
+        onCreate={handleCreateMenuItemFromDialog}
+      />
 
       <MemberQuickViewSheet
         userId={quickViewUserId}
