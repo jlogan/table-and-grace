@@ -5,8 +5,10 @@ import { requireRoleMiddleware } from "@/auth/middleware.server";
 import {
   createWeeklyBatch,
   getBatchInventory,
+  getMenuItemsLastBatchAdded,
   listActiveMenuItemsForAdmin,
   listAdminBatches,
+  listBatchPlanningMembers,
   listAdminOrders,
   listAdminPickupWindows,
   openMenuForSelection,
@@ -19,6 +21,7 @@ import {
   getAdminCustomerDetail,
   getAdminDashboardOverview,
   getBatchMealDemand,
+  getCustomerLikedMenuItems,
   listAdminCustomers,
   listAdminMemberships,
   listAdminPlanCategories,
@@ -38,6 +41,10 @@ import { dietaryPreferenceSlugs, foodAllergenSlugs } from "@/lib/food-profile";
 
 const batchIdSchema = z.object({
   batchId: z.string().uuid(),
+});
+
+const customerIdSchema = z.object({
+  userId: z.string().uuid(),
 });
 
 const optionalBatchFilterSchema = z.object({
@@ -79,6 +86,19 @@ export const fetchAdminPickupWindows = createServerFn({ method: "GET" })
 export const fetchActiveMenuItemsForAdmin = createServerFn({ method: "GET" })
   .middleware([requireRoleMiddleware("admin")])
   .handler(async () => listActiveMenuItemsForAdmin());
+
+export const fetchBatchPlanningMembers = createServerFn({ method: "GET" })
+  .middleware([requireRoleMiddleware("admin")])
+  .handler(async () => listBatchPlanningMembers());
+
+export const fetchMenuItemsLastBatchAdded = createServerFn({ method: "GET" })
+  .middleware([requireRoleMiddleware("admin")])
+  .handler(async () => getMenuItemsLastBatchAdded());
+
+export const fetchCustomerLikedMenuItems = createServerFn({ method: "GET" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(customerIdSchema)
+  .handler(async ({ data }) => getCustomerLikedMenuItems(data.userId));
 
 export const fetchBatchInventory = createServerFn({ method: "GET" })
   .middleware([requireRoleMiddleware("admin")])
@@ -132,10 +152,6 @@ export const fetchAdminDashboard = createServerFn({ method: "GET" })
 export const fetchAdminCustomers = createServerFn({ method: "GET" })
   .middleware([requireRoleMiddleware("admin")])
   .handler(async () => listAdminCustomers());
-
-const customerIdSchema = z.object({
-  userId: z.string().uuid(),
-});
 
 export const fetchAdminCustomerDetail = createServerFn({ method: "GET" })
   .middleware([requireRoleMiddleware("admin")])

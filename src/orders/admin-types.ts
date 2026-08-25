@@ -26,6 +26,28 @@ export type AdminMenuItemOption = {
   note: string | null;
 };
 
+export type BatchPlanningMemberRow = {
+  membershipId: string;
+  userId: string;
+  email: string;
+  name: string | null;
+  planName: string | null;
+  mealsPerWeek: number;
+  portionDefault: PortionDefault;
+  lastOrderedDate: string | null;
+};
+
+export type MenuItemLastBatchAddedRow = {
+  menuItemId: string;
+  lastAddedAt: string | null;
+};
+
+export type AdminCustomerLikedMenuItem = {
+  menuItemId: string;
+  menuItemName: string;
+  totalQty: number;
+};
+
 export type AdminMenuItemRow = {
   id: string;
   slug: string;

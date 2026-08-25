@@ -438,6 +438,82 @@ export function classifyActiveMembershipRows(rows: ActiveMembershipRow[]): {
   return { eligible, unresolved };
 }
 
+export type BatchPlanningMember = {
+  membershipId: string;
+  userId: string;
+  email: string;
+  name: string | null;
+  planName: string | null;
+  mealsPerWeek: number;
+  portionDefault: Portion;
+  lastOrderedDate: string | null;
+};
+
+/** Active eligible members sorted by oldest last order first (never-ordered first). */
+export async function listBatchPlanningMembers(
+  client: DbClient = getDb(),
+): Promise<BatchPlanningMember[]> {
+  const db = client;
+  const { eligible } = await listPublishEligibleMembers(db);
+  if (eligible.length === 0) return [];
+
+  const userIds = [...new Set(eligible.map((member) => member.userId))];
+  const lastOrderRows = await db
+    .select({
+      userId: weeklyOrders.userId,
+      lastOrderedDate: sql<Date>`max(${weeklyBatches.weekStart})`,
+    })
+    .from(weeklyOrders)
+    .innerJoin(weeklyBatches, eq(weeklyOrders.batchId, weeklyBatches.id))
+    .where(inArray(weeklyOrders.userId, userIds))
+    .groupBy(weeklyOrders.userId);
+
+  const lastOrderByUser = new Map(
+    lastOrderRows.map((row) => [row.userId, toIsoDateString(row.lastOrderedDate)]),
+  );
+
+  const members = eligible.map((member) => ({
+    membershipId: member.membershipId,
+    userId: member.userId,
+    email: member.email,
+    name: member.name,
+    planName: member.planName,
+    mealsPerWeek: member.mealsPerWeek,
+    portionDefault: member.portionDefault,
+    lastOrderedDate: lastOrderByUser.get(member.userId) ?? null,
+  }));
+
+  return members.sort((a, b) => {
+    if (a.lastOrderedDate === b.lastOrderedDate) {
+      const labelA = a.name?.trim() || a.email;
+      const labelB = b.name?.trim() || b.email;
+      return labelA.localeCompare(labelB);
+    }
+    if (!a.lastOrderedDate) return -1;
+    if (!b.lastOrderedDate) return 1;
+    return a.lastOrderedDate.localeCompare(b.lastOrderedDate);
+  });
+}
+
+/** Most recent batch_items.created_at per menu item across all batches. */
+export async function getMenuItemsLastBatchAdded(): Promise<
+  Array<{ menuItemId: string; lastAddedAt: string | null }>
+> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      menuItemId: batchItems.menuItemId,
+      lastAddedAt: sql<Date>`max(${batchItems.createdAt})`,
+    })
+    .from(batchItems)
+    .groupBy(batchItems.menuItemId);
+
+  return rows.map((row) => ({
+    menuItemId: row.menuItemId,
+    lastAddedAt: row.lastAddedAt?.toISOString() ?? null,
+  }));
+}
+
 export async function listPublishEligibleMembers(
   client: DbClient = getDb(),
 ): Promise<PublishEligibility> {

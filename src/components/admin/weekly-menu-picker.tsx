@@ -1,77 +1,167 @@
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
-import { useState } from "react";
+import { Loader2, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
   CommandGroup,
-  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { AdminMenuItemOption } from "@/orders/admin-types";
+import { Input } from "@/components/ui/input";
+import { formatLastBatchAdded } from "@/lib/batch-date-labels";
 import { cn } from "@/lib/utils";
+import type { AdminMenuItemOption } from "@/orders/admin-types";
+
+const MIN_SEARCH_LENGTH = 3;
 
 type WeeklyMenuPickerProps = {
   menuItems: AdminMenuItemOption[];
   selectedMenuItemIds: Set<string>;
   disabled?: boolean;
+  creatingItem?: boolean;
+  lastBatchAddedByMenuItemId?: Map<string, string | null>;
   onSelect: (menuItemId: string) => void;
+  onCreateNewItem?: (name: string) => Promise<void>;
 };
 
 export function WeeklyMenuPicker({
   menuItems,
   selectedMenuItemIds,
   disabled,
+  creatingItem,
+  lastBatchAddedByMenuItemId,
   onSelect,
+  onCreateNewItem,
 }: WeeklyMenuPickerProps) {
+  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
 
-  const availableItems = menuItems.filter((item) => !selectedMenuItemIds.has(item.id));
+  const trimmedQuery = query.trim();
+  const canSearch = trimmedQuery.length >= MIN_SEARCH_LENGTH;
+
+  const availableItems = useMemo(
+    () => menuItems.filter((item) => !selectedMenuItemIds.has(item.id)),
+    [menuItems, selectedMenuItemIds],
+  );
+
+  const matchingItems = useMemo(() => {
+    if (!canSearch) return [];
+    const needle = trimmedQuery.toLowerCase();
+    return availableItems.filter((item) => {
+      const haystack = `${item.name} ${item.note ?? ""}`.toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [availableItems, canSearch, trimmedQuery]);
+
+  const hasExactMatch = useMemo(() => {
+    if (!canSearch) return false;
+    const needle = trimmedQuery.toLowerCase();
+    return menuItems.some((item) => item.name.trim().toLowerCase() === needle);
+  }, [canSearch, menuItems, trimmedQuery]);
+
+  const showAddNew =
+    canSearch && !hasExactMatch && Boolean(onCreateNewItem) && trimmedQuery.length > 0;
+
+  async function handleCreateNew() {
+    if (!onCreateNewItem || !trimmedQuery) return;
+    await onCreateNewItem(trimmedQuery);
+    setQuery("");
+    setOpen(false);
+  }
+
+  function handleSelectItem(menuItemId: string) {
+    onSelect(menuItemId);
+    setQuery("");
+    setOpen(false);
+  }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
+    <div className="relative w-full max-w-md">
+      <div className="relative">
+        <Plus className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          type="search"
           role="combobox"
-          aria-expanded={open}
-          disabled={disabled || availableItems.length === 0}
-          className="w-full max-w-md justify-between sm:w-[320px]"
+          aria-expanded={open && canSearch}
+          aria-autocomplete="list"
+          disabled={disabled || creatingItem}
+          placeholder="Type to search items (min. 3 characters)…"
+          className="pl-9"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => {
+            window.setTimeout(() => setOpen(false), 150);
+          }}
+        />
+        {creatingItem ? (
+          <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+        ) : null}
+      </div>
+
+      {open && canSearch ? (
+        <div
+          className={cn(
+            "absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover shadow-md",
+          )}
         >
-          <span className="flex items-center gap-2 truncate">
-            <Plus className="size-4 shrink-0" />
-            Add item to batch
-          </span>
-          <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[320px] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search active menu…" />
-          <CommandList>
-            <CommandEmpty>No matching menu items.</CommandEmpty>
-            <CommandGroup>
-              {availableItems.map((item) => (
-                <CommandItem
-                  key={item.id}
-                  value={`${item.name} ${item.note ?? ""}`}
-                  onSelect={() => {
-                    onSelect(item.id);
-                    setOpen(false);
-                  }}
-                >
-                  <Check className={cn("mr-2 size-4 opacity-0")} />
-                  <span className="truncate">{item.name}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+          <Command shouldFilter={false}>
+            <CommandList>
+              {matchingItems.length === 0 && !showAddNew ? (
+                <CommandEmpty>No matching menu items.</CommandEmpty>
+              ) : null}
+              {matchingItems.length > 0 ? (
+                <CommandGroup heading="Menu items">
+                  {matchingItems.map((item) => {
+                    const lastAdded = formatLastBatchAdded(
+                      lastBatchAddedByMenuItemId?.get(item.id),
+                    );
+                    return (
+                      <CommandItem
+                        key={item.id}
+                        value={item.id}
+                        onSelect={() => handleSelectItem(item.id)}
+                      >
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="truncate">{item.name}</span>
+                          {lastAdded ? (
+                            <span className="text-xs text-muted-foreground">
+                              Last in batch {lastAdded}
+                            </span>
+                          ) : null}
+                        </div>
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              ) : null}
+              {showAddNew ? (
+                <CommandGroup>
+                  <CommandItem
+                    value={`add-new-${trimmedQuery}`}
+                    onSelect={() => {
+                      void handleCreateNew();
+                    }}
+                  >
+                    <span className="font-medium">Add New Item: {trimmedQuery}</span>
+                  </CommandItem>
+                </CommandGroup>
+              ) : null}
+            </CommandList>
+          </Command>
+        </div>
+      ) : null}
+
+      {open && !canSearch && trimmedQuery.length > 0 ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Type {MIN_SEARCH_LENGTH - trimmedQuery.length} more character
+          {MIN_SEARCH_LENGTH - trimmedQuery.length === 1 ? "" : "s"} to search.
+        </p>
+      ) : null}
+    </div>
   );
 }

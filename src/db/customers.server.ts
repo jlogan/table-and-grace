@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { parseISO } from "date-fns";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type {
   AdminCustomerDetail,
@@ -486,6 +486,29 @@ export async function getAdminCustomerDetail(userId: string): Promise<AdminCusto
       };
     }),
   };
+}
+
+/** Top ordered menu items for a customer (by total quantity across all orders). */
+export async function getCustomerLikedMenuItems(
+  userId: string,
+): Promise<Array<{ menuItemId: string; menuItemName: string; totalQty: number }>> {
+  const db = getDb();
+
+  const rows = await db
+    .select({
+      menuItemId: orderLines.menuItemId,
+      menuItemName: menuItems.name,
+      totalQty: sql<number>`coalesce(sum(${orderLines.qty}), 0)`.mapWith(Number),
+    })
+    .from(orderLines)
+    .innerJoin(weeklyOrders, eq(orderLines.orderId, weeklyOrders.id))
+    .innerJoin(menuItems, eq(orderLines.menuItemId, menuItems.id))
+    .where(eq(weeklyOrders.userId, userId))
+    .groupBy(orderLines.menuItemId, menuItems.name)
+    .orderBy(desc(sql`sum(${orderLines.qty})`), asc(menuItems.name))
+    .limit(8);
+
+  return rows.filter((row) => row.totalQty > 0);
 }
 
 /** All memberships for the admin memberships view. */
