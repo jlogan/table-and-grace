@@ -10,6 +10,7 @@ import {
   OPEN_MENU_FOR_SELECTION_TX_PLAN,
   planOpenMenuOrderCreates,
   resolveMemberMealsPerWeek,
+  validateGenerateBatchOrders,
   validateOpenMenuSelectionDeadline,
   type ActiveMembershipRow,
   type PublishEligibleMember,
@@ -490,6 +491,32 @@ function main() {
   assert.ok(
     CUSTOMER_SELECTION_TX_PLAN.indexOf("replace_order_lines") >
       CUSTOMER_SELECTION_TX_PLAN.indexOf("validate_selection_editable"),
+  );
+
+  const generateIssues = validateGenerateBatchOrders([
+    {
+      membershipId: "m1",
+      memberLabel: "Alex (alex@example.com)",
+      planSlug: null,
+      mealsPerWeek: 5,
+      lines: [{ menuItemName: "Chicken", qty: 2, unitPriceCents: 0 }],
+    },
+  ]);
+  assert.equal(generateIssues.length, 2);
+  assert.ok(generateIssues.some((issue) => issue.message.includes("Missing membership plan")));
+  assert.ok(generateIssues.some((issue) => issue.message.includes("no price")));
+
+  assert.equal(
+    validateGenerateBatchOrders([
+      {
+        membershipId: "m2",
+        memberLabel: "Blake",
+        planSlug: "performance",
+        mealsPerWeek: 5,
+        lines: [{ menuItemName: "Salmon", qty: 1, unitPriceCents: 1200 }],
+      },
+    ]).length,
+    0,
   );
 
   console.log("Selection lifecycle checks passed.");

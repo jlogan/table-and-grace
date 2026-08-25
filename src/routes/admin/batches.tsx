@@ -17,6 +17,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -26,17 +33,22 @@ import {
 } from "@/components/ui/table";
 import { formatDateString } from "@/lib/dates";
 import { formatLastBatchAdded } from "@/lib/batch-date-labels";
+import { centsToLabel } from "@/orders/review-types";
 import {
   createAdminWeeklyBatch,
   createAdminMenuItemRecord,
   fetchActiveMenuItemsForAdmin,
   fetchAdminBatches,
+  fetchBatchDraftOrderSummaries,
   fetchBatchInventory,
   fetchBatchMealDemand,
+  fetchBatchMemberDraftOrder,
   fetchBatchPlanningMembers,
   fetchMenuItemsLastBatchAdded,
+  generateAdminBatchOrders,
   openAdminMenuForSelection,
-  saveAdminBatchInventory,
+  saveAdminBatchCatalog,
+  saveAdminBatchMemberDraftOrder,
 } from "@/orders/admin.functions.server";
 import {
   batchStatusBadgeVariant,
@@ -44,7 +56,9 @@ import {
   type AdminBatchInventoryRow,
   type AdminBatchSummary,
   type AdminMenuItemOption,
+  type BatchDraftOrderSummaryRow,
   type BatchMealDemandRow,
+  type BatchMemberDraftOrderRow,
   type BatchPlanningMemberRow,
 } from "@/orders/admin-types";
 
@@ -89,6 +103,10 @@ function localDatetimeToIso(value: string): string {
   return new Date(value).toISOString();
 }
 
+function memberLabel(member: BatchPlanningMemberRow): string {
+  return member.name?.trim() || member.email;
+}
+
 export const Route = createFileRoute("/admin/batches")({
   beforeLoad: async () => {
     const [batches, menuItems] = await Promise.all([
@@ -108,7 +126,11 @@ function AdminBatchesPage() {
   const createFn = useServerFn(createAdminWeeklyBatch);
   const createMenuItemFn = useServerFn(createAdminMenuItemRecord);
   const inventoryFn = useServerFn(fetchBatchInventory);
-  const saveInventoryFn = useServerFn(saveAdminBatchInventory);
+  const saveCatalogFn = useServerFn(saveAdminBatchCatalog);
+  const draftSummariesFn = useServerFn(fetchBatchDraftOrderSummaries);
+  const memberDraftFn = useServerFn(fetchBatchMemberDraftOrder);
+  const saveMemberDraftFn = useServerFn(saveAdminBatchMemberDraftOrder);
+  const generateOrdersFn = useServerFn(generateAdminBatchOrders);
   const openMenuFn = useServerFn(openAdminMenuForSelection);
   const refreshBatchesFn = useServerFn(fetchAdminBatches);
   const mealDemandFn = useServerFn(fetchBatchMealDemand);
@@ -125,21 +147,30 @@ function AdminBatchesPage() {
   const [mealDemand, setMealDemand] = useState<BatchMealDemandRow[]>([]);
   const [publishEligibility, setPublishEligibility] = useState<PublishEligibility | null>(null);
   const [planningMembers, setPlanningMembers] = useState<BatchPlanningMemberRow[]>([]);
+  const [draftSummaries, setDraftSummaries] = useState<BatchDraftOrderSummaryRow[]>([]);
   const [lastBatchAddedByMenuItemId, setLastBatchAddedByMenuItemId] = useState<
     Map<string, string | null>
   >(new Map());
   const [quickViewUserId, setQuickViewUserId] = useState<string | null>(null);
   const [quickViewLabel, setQuickViewLabel] = useState<string | null>(null);
   const [creatingMenuItem, setCreatingMenuItem] = useState(false);
-  const [inventoryDraft, setInventoryDraft] = useState<Record<string, number>>({});
+  const [catalogMenuItemIds, setCatalogMenuItemIds] = useState<Set<string>>(new Set());
+  const [createSelectedMenuItemIds, setCreateSelectedMenuItemIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
+  const [memberDraft, setMemberDraft] = useState<BatchMemberDraftOrderRow | null>(null);
+  const [orderLineDraft, setOrderLineDraft] = useState<Record<string, number>>({});
   const [createBatchDate, setCreateBatchDate] = useState(todayIsoDate);
   const [createPickupDate, setCreatePickupDate] = useState(() =>
     addDaysToIsoDate(todayIsoDate(), 6),
   );
-  const [createInventoryDraft, setCreateInventoryDraft] = useState<Record<string, number>>({});
   const [loadingInventory, setLoadingInventory] = useState(false);
+  const [loadingMemberDraft, setLoadingMemberDraft] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingCatalog, setSavingCatalog] = useState(false);
+  const [savingMemberDraft, setSavingMemberDraft] = useState(false);
+  const [generatingOrders, setGeneratingOrders] = useState(false);
   const [openingMenu, setOpeningMenu] = useState(false);
   const [selectionDeadlineLocal, setSelectionDeadlineLocal] = useState(
     defaultSelectionDeadlineLocal,
@@ -148,22 +179,13 @@ function AdminBatchesPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   const selectedBatch = batches.find((b) => b.id === selectedBatchId) ?? null;
-  const canEditInventory =
-    selectedBatch?.status === "planning" || selectedBatch?.status === "draft";
-  const showProjectedDemand = canEditInventory;
-  const savedInventoryCount =
-    inventory.filter((row) => row.qtyCooked > 0).length || selectedBatch?.itemCount || 0;
+  const canEditBatch = selectedBatch?.status === "planning" || selectedBatch?.status === "draft";
+  const catalogItemCount =
+    catalogMenuItemIds.size || inventory.filter((row) => row.batchItemId).length;
   const eligibleMembers = publishEligibility?.eligible ?? [];
   const eligibleCount = eligibleMembers.length;
   const excludedInactiveCount = publishEligibility?.excludedInactiveCount ?? 0;
   const unresolvedMembers = publishEligibility?.unresolved ?? [];
-  const projectedTotalMeals = eligibleMembers.reduce((sum, member) => sum + member.mealsPerWeek, 0);
-  const projected4ozMeals = eligibleMembers
-    .filter((member) => member.portionDefault === "4oz")
-    .reduce((sum, member) => sum + member.mealsPerWeek, 0);
-  const projected6ozMeals = eligibleMembers
-    .filter((member) => member.portionDefault === "6oz")
-    .reduce((sum, member) => sum + member.mealsPerWeek, 0);
   const existingBatchDates = useMemo(
     () => new Set(batches.map((batch) => batch.weekStart)),
     [batches],
@@ -172,63 +194,46 @@ function AdminBatchesPage() {
     () => new Map(menuItems.map((item) => [item.id, item.name])),
     [menuItems],
   );
-  const plannedTotalMeals = useMemo(
-    () => Object.values(inventoryDraft).reduce((sum, qty) => sum + qty, 0),
-    [inventoryDraft],
-  );
-  const planningMealsDelta = plannedTotalMeals - projectedTotalMeals;
-  const planningStatusText =
-    planningMealsDelta < 0
-      ? `${Math.abs(planningMealsDelta)} still to plan`
-      : planningMealsDelta === 0
-        ? "Fully planned"
-        : `${planningMealsDelta} over plan`;
-  const hideRemainingColumn = selectedBatch?.status === "planning";
   const createSelectedRows = useMemo(() => {
-    return Object.entries(createInventoryDraft)
-      .filter(([, qty]) => qty > 0)
-      .map(([menuItemId, qty]) => ({
+    return [...createSelectedMenuItemIds]
+      .map((menuItemId) => ({
         menuItemId,
         menuItemName: menuItemNameById.get(menuItemId) ?? "Unknown item",
-        qtyPlanned: qty,
       }))
       .sort((a, b) => a.menuItemName.localeCompare(b.menuItemName));
-  }, [createInventoryDraft, menuItemNameById]);
-  const createSelectedMenuItemIds = useMemo(
-    () => new Set(createSelectedRows.map((row) => row.menuItemId)),
-    [createSelectedRows],
-  );
+  }, [createSelectedMenuItemIds, menuItemNameById]);
   const canCreateBatch =
     Boolean(createBatchDate && createPickupDate) &&
     createSelectedRows.length > 0 &&
     !existingBatchDates.has(createBatchDate);
-  const selectedWeeklyMenuRows = useMemo(() => {
-    return Object.entries(inventoryDraft)
-      .filter(([, qty]) => qty > 0)
-      .map(([menuItemId, qty]) => {
+  const catalogRows = useMemo(() => {
+    return [...catalogMenuItemIds]
+      .map((menuItemId) => {
         const inventoryRow = inventory.find((row) => row.menuItemId === menuItemId);
         return {
           menuItemId,
           menuItemName:
             inventoryRow?.menuItemName ?? menuItemNameById.get(menuItemId) ?? "Unknown item",
-          qtyPlanned: qty,
-          qtyRemaining: inventoryRow?.qtyRemaining ?? qty,
         };
       })
       .sort((a, b) => a.menuItemName.localeCompare(b.menuItemName));
-  }, [inventory, inventoryDraft, menuItemNameById]);
-  const selectedMenuItemIds = useMemo(
-    () => new Set(selectedWeeklyMenuRows.map((row) => row.menuItemId)),
-    [selectedWeeklyMenuRows],
+  }, [catalogMenuItemIds, inventory, menuItemNameById]);
+  const selectedMember =
+    planningMembers.find((m) => m.membershipId === selectedMembershipId) ?? null;
+  const draftMealTotal = useMemo(
+    () => Object.values(orderLineDraft).reduce((sum, qty) => sum + qty, 0),
+    [orderLineDraft],
+  );
+  const draftMemberIds = useMemo(
+    () => new Set(draftSummaries.map((summary) => summary.membershipId)),
+    [draftSummaries],
   );
   const openMenuBlockReasons: string[] = [];
-  if (!canEditInventory) {
+  if (!canEditBatch) {
     openMenuBlockReasons.push("Batch is not in planning or draft.");
   }
-  if (savedInventoryCount === 0) {
-    openMenuBlockReasons.push(
-      "Save planned quantities for at least one item before sending to members for selection.",
-    );
+  if (catalogItemCount === 0) {
+    openMenuBlockReasons.push("Save at least one batch menu item before opening selection.");
   }
   if (eligibleCount === 0) {
     openMenuBlockReasons.push(
@@ -236,7 +241,8 @@ function AdminBatchesPage() {
     );
   }
   const canOpenMenu = openMenuBlockReasons.length === 0;
-  const showPlanningMembers = mode === "create" || (mode === "detail" && canEditInventory);
+  const showPlanningMembers = mode === "create" || (mode === "detail" && canEditBatch);
+  const canGenerateOrders = canEditBatch && draftSummaries.length > 0;
 
   const loadPlanningContext = useCallback(async () => {
     const [membersResult, lastAddedResult] = await Promise.allSettled([
@@ -282,15 +288,9 @@ function AdminBatchesPage() {
     );
     if (existing) {
       if (mode === "create") {
-        setCreateInventoryDraft((prev) => ({
-          ...prev,
-          [existing.id]: (prev[existing.id] ?? 0) > 0 ? prev[existing.id]! : 1,
-        }));
+        setCreateSelectedMenuItemIds((prev) => new Set(prev).add(existing.id));
       } else {
-        setInventoryDraft((prev) => ({
-          ...prev,
-          [existing.id]: (prev[existing.id] ?? 0) > 0 ? prev[existing.id]! : 1,
-        }));
+        setCatalogMenuItemIds((prev) => new Set(prev).add(existing.id));
       }
       return;
     }
@@ -302,9 +302,9 @@ function AdminBatchesPage() {
       const newItem: AdminMenuItemOption = { id: result.id, name: trimmed, note: null };
       setMenuItems((prev) => [...prev, newItem].sort((a, b) => a.name.localeCompare(b.name)));
       if (mode === "create") {
-        setCreateInventoryDraft((prev) => ({ ...prev, [result.id]: 1 }));
+        setCreateSelectedMenuItemIds((prev) => new Set(prev).add(result.id));
       } else {
-        setInventoryDraft((prev) => ({ ...prev, [result.id]: 1 }));
+        setCatalogMenuItemIds((prev) => new Set(prev).add(result.id));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create menu item.");
@@ -315,7 +315,7 @@ function AdminBatchesPage() {
 
   function openMemberQuickView(member: BatchPlanningMemberRow) {
     setQuickViewUserId(member.userId);
-    setQuickViewLabel(member.name?.trim() || member.email);
+    setQuickViewLabel(memberLabel(member));
   }
 
   async function refreshBatches() {
@@ -324,28 +324,54 @@ function AdminBatchesPage() {
     return next;
   }
 
+  async function loadDraftSummaries(batchId: string) {
+    const summaries = await draftSummariesFn({ data: { batchId } });
+    setDraftSummaries(summaries);
+    return summaries;
+  }
+
+  async function loadMemberDraft(batchId: string, membershipId: string) {
+    setLoadingMemberDraft(true);
+    setError(null);
+    try {
+      const draft = await memberDraftFn({ data: { batchId, membershipId } });
+      setMemberDraft(draft);
+      setOrderLineDraft(
+        Object.fromEntries(
+          draft.lines.filter((line) => line.qty > 0).map((line) => [line.menuItemId, line.qty]),
+        ),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load member order draft.");
+      setMemberDraft(null);
+      setOrderLineDraft({});
+    } finally {
+      setLoadingMemberDraft(false);
+    }
+  }
+
   async function loadInventory(batchId: string, batchStatus?: AdminBatchSummary["status"]) {
     setLoadingInventory(true);
     setError(null);
     try {
       const isPrePublish = batchStatus === "planning" || batchStatus === "draft";
-      const [rows, demand, eligibility] = await Promise.all([
+      const [rows, demand, eligibility, summaries] = await Promise.all([
         inventoryFn({ data: { batchId } }),
         isPrePublish
           ? projectedMealDemandFn({ data: { batchId } })
           : mealDemandFn({ data: { batchId } }),
         isPrePublish ? publishEligibilityFn() : Promise.resolve(null),
+        isPrePublish ? draftSummariesFn({ data: { batchId } }) : Promise.resolve([]),
       ]);
       setInventory(rows);
-      setInventoryDraft(
-        Object.fromEntries(
-          rows.filter((row) => row.qtyCooked > 0).map((row) => [row.menuItemId, row.qtyCooked]),
-        ),
+      setCatalogMenuItemIds(
+        new Set(rows.filter((row) => row.batchItemId).map((row) => row.menuItemId)),
       );
       setMealDemand(demand);
       setPublishEligibility(eligibility);
+      setDraftSummaries(summaries);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load inventory.");
+      setError(e instanceof Error ? e.message : "Could not load batch.");
     } finally {
       setLoadingInventory(false);
     }
@@ -354,6 +380,9 @@ function AdminBatchesPage() {
   async function openBatchDetail(batch: AdminBatchSummary) {
     setSelectedBatchId(batch.id);
     setMode("detail");
+    setSelectedMembershipId(null);
+    setMemberDraft(null);
+    setOrderLineDraft({});
     setMessage(null);
     await loadInventory(batch.id, batch.status);
   }
@@ -364,7 +393,11 @@ function AdminBatchesPage() {
     setInventory([]);
     setMealDemand([]);
     setPublishEligibility(null);
-    setInventoryDraft({});
+    setCatalogMenuItemIds(new Set());
+    setSelectedMembershipId(null);
+    setMemberDraft(null);
+    setOrderLineDraft({});
+    setDraftSummaries([]);
     setError(null);
     setMessage(null);
   }
@@ -373,7 +406,7 @@ function AdminBatchesPage() {
     setMode("create");
     setCreateBatchDate(todayIsoDate());
     setCreatePickupDate(addDaysToIsoDate(todayIsoDate(), 6));
-    setCreateInventoryDraft({});
+    setCreateSelectedMenuItemIds(new Set());
     setError(null);
     setMessage(null);
   }
@@ -384,15 +417,11 @@ function AdminBatchesPage() {
     setError(null);
     setMessage(null);
     try {
-      const items = createSelectedRows.map((row) => ({
-        menuItemId: row.menuItemId,
-        qtyCooked: row.qtyPlanned,
-      }));
       const result = await createFn({
         data: {
           batchDate: createBatchDate,
           pickupDate: createPickupDate,
-          items,
+          menuItemIds: createSelectedRows.map((row) => row.menuItemId),
         },
       });
       const next = await refreshBatches();
@@ -409,39 +438,85 @@ function AdminBatchesPage() {
     }
   }
 
-  async function handleSaveInventory() {
-    if (!selectedBatchId) return;
-    setSaving(true);
+  async function handleSaveCatalog() {
+    if (!selectedBatchId || catalogMenuItemIds.size === 0) return;
+    setSavingCatalog(true);
     setError(null);
     setMessage(null);
     try {
-      const removedItems = inventory
-        .filter(
-          (row) =>
-            row.batchItemId && row.qtyCooked > 0 && (inventoryDraft[row.menuItemId] ?? 0) === 0,
-        )
-        .map((row) => ({ menuItemId: row.menuItemId, qtyCooked: 0 }));
-      const plannedItems = Object.entries(inventoryDraft)
-        .filter(([, qtyCooked]) => qtyCooked > 0)
-        .map(([menuItemId, qtyCooked]) => ({ menuItemId, qtyCooked }));
-      const items = [...plannedItems, ...removedItems];
-      const rows = await saveInventoryFn({ data: { batchId: selectedBatchId, items } });
+      const rows = await saveCatalogFn({
+        data: {
+          batchId: selectedBatchId,
+          menuItemIds: [...catalogMenuItemIds],
+        },
+      });
       setInventory(rows);
-      setInventoryDraft(
-        Object.fromEntries(
-          rows.filter((row) => row.qtyCooked > 0).map((row) => [row.menuItemId, row.qtyCooked]),
-        ),
+      setCatalogMenuItemIds(
+        new Set(rows.filter((row) => row.batchItemId).map((row) => row.menuItemId)),
       );
       await refreshBatches();
-      if (selectedBatch) {
-        await loadInventory(selectedBatchId, selectedBatch.status);
+      if (selectedMembershipId) {
+        await loadMemberDraft(selectedBatchId, selectedMembershipId);
       }
-      setMessage("Planned quantities saved.");
+      setMessage("Batch menu items saved.");
       void loadPlanningContext();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save inventory.");
+      setError(e instanceof Error ? e.message : "Could not save batch menu items.");
     } finally {
-      setSaving(false);
+      setSavingCatalog(false);
+    }
+  }
+
+  async function handleSaveMemberDraft() {
+    if (!selectedBatchId || !selectedMembershipId) return;
+    setSavingMemberDraft(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const lines = Object.entries(orderLineDraft)
+        .filter(([, qty]) => qty > 0)
+        .map(([menuItemId, qty]) => ({ menuItemId, qty }));
+      const draft = await saveMemberDraftFn({
+        data: {
+          batchId: selectedBatchId,
+          membershipId: selectedMembershipId,
+          lines,
+        },
+      });
+      setMemberDraft(draft);
+      setOrderLineDraft(
+        Object.fromEntries(
+          draft.lines.filter((line) => line.qty > 0).map((line) => [line.menuItemId, line.qty]),
+        ),
+      );
+      await loadDraftSummaries(selectedBatchId);
+      await refreshBatches();
+      setMessage(`Saved draft order for ${memberLabel(selectedMember!)}.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save member order draft.");
+    } finally {
+      setSavingMemberDraft(false);
+    }
+  }
+
+  async function handleGenerateOrders() {
+    if (!selectedBatchId) return;
+    setGeneratingOrders(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await generateOrdersFn({ data: { batchId: selectedBatchId } });
+      const next = await refreshBatches();
+      const updated = next.find((b) => b.id === selectedBatchId);
+      await loadInventory(selectedBatchId, updated?.status);
+      if (selectedMembershipId) {
+        await loadMemberDraft(selectedBatchId, selectedMembershipId);
+      }
+      setMessage(`Generated ${result.ordersGenerated} order(s) for customer review.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not generate orders.");
+    } finally {
+      setGeneratingOrders(false);
     }
   }
 
@@ -468,6 +543,12 @@ function AdminBatchesPage() {
     }
   }
 
+  async function handleSelectMember(membershipId: string) {
+    if (!selectedBatchId) return;
+    setSelectedMembershipId(membershipId);
+    await loadMemberDraft(selectedBatchId, membershipId);
+  }
+
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -475,10 +556,10 @@ function AdminBatchesPage() {
           <h2 className="text-lg font-semibold tracking-tight text-foreground">Weekly batches</h2>
           <p className="text-sm text-muted-foreground">
             {mode === "list"
-              ? "Select a batch to manage items, send to members for selection, or create a new batch."
+              ? "Select a batch to build member orders, send to selection, or create a new batch."
               : mode === "create"
-                ? "Set batch and pickup dates, choose items and quantities, then create the batch."
-                : "Choose batch items, set planned quantities, then send to members for selection."}
+                ? "Set batch and pickup dates, choose catalog items, then create the batch."
+                : "Build member orders incrementally, generate orders when ready, or open selection for self-serve picking."}
           </p>
         </div>
         {mode === "list" ? (
@@ -499,8 +580,8 @@ function AdminBatchesPage() {
           <CardHeader>
             <CardTitle className="text-base">Create batch</CardTitle>
             <CardDescription>
-              Set the batch date and pickup date, then add items with planned quantities. Each batch
-              date can have only one batch.
+              Set the batch date and pickup date, then choose catalog items for this batch.
+              Quantities are assigned per member after the batch is created.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -555,10 +636,7 @@ function AdminBatchesPage() {
                 creatingItem={creatingMenuItem}
                 lastBatchAddedByMenuItemId={lastBatchAddedByMenuItemId}
                 onSelect={(menuItemId) =>
-                  setCreateInventoryDraft((prev) => ({
-                    ...prev,
-                    [menuItemId]: (prev[menuItemId] ?? 0) > 0 ? prev[menuItemId]! : 1,
-                  }))
+                  setCreateSelectedMenuItemIds((prev) => new Set(prev).add(menuItemId))
                 }
                 onCreateNewItem={handleCreateNewMenuItem}
               />
@@ -576,7 +654,6 @@ function AdminBatchesPage() {
                       <TableRow>
                         <TableHead>Menu item</TableHead>
                         <TableHead>Last in batch</TableHead>
-                        <TableHead className="w-[140px] text-right">Planned quantity</TableHead>
                         <TableHead className="w-[56px]" />
                       </TableRow>
                     </TableHeader>
@@ -589,32 +666,17 @@ function AdminBatchesPage() {
                               "—"}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Input
-                              type="number"
-                              min={1}
-                              max={999}
-                              className="ml-auto w-24 text-right tabular-nums"
-                              value={createInventoryDraft[row.menuItemId] ?? 0}
-                              onChange={(e) => {
-                                const qty = Number(e.target.value) || 0;
-                                setCreateInventoryDraft((prev) => ({
-                                  ...prev,
-                                  [row.menuItemId]: qty,
-                                }));
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell className="text-right">
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
                               aria-label={`Remove ${row.menuItemName}`}
                               onClick={() =>
-                                setCreateInventoryDraft((prev) => ({
-                                  ...prev,
-                                  [row.menuItemId]: 0,
-                                }))
+                                setCreateSelectedMenuItemIds((prev) => {
+                                  const next = new Set(prev);
+                                  next.delete(row.menuItemId);
+                                  return next;
+                                })
                               }
                             >
                               <X className="size-4" />
@@ -642,9 +704,7 @@ function AdminBatchesPage() {
                   Batch date and pickup date are required.
                 </p>
               ) : createSelectedRows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Add at least one item with quantity greater than zero.
-                </p>
+                <p className="text-sm text-muted-foreground">Add at least one menu item.</p>
               ) : null}
             </div>
           </CardContent>
@@ -784,157 +844,44 @@ function AdminBatchesPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">
-                  {showPlanningMembers ? "Members due for items" : "Eligible memberships"}
-                </CardTitle>
+                <CardTitle className="text-base">Order-building progress</CardTitle>
                 <CardDescription>
-                  {showPlanningMembers
-                    ? "Active memberships sorted by last order date — click a name for profile details"
-                    : "Active memberships that will receive empty selection orders when you send this batch to members for selection"}
-                  {excludedInactiveCount > 0
-                    ? ` · ${excludedInactiveCount} paused or cancelled excluded`
-                    : ""}
+                  {canEditBatch
+                    ? `${draftSummaries.length} saved draft order(s) · ${catalogItemCount} menu item(s) in batch`
+                    : "Generated and finalized orders for this batch"}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                {eligibleCount === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No eligible active members —{" "}
-                    <Link
-                      to="/admin/memberships"
-                      search={{ userId: undefined, add: undefined }}
-                      className="text-primary underline-offset-4 hover:underline"
-                    >
-                      activate a membership
-                    </Link>
-                    .
-                  </p>
-                ) : (
+              <CardContent className="space-y-3">
+                {canEditBatch ? (
                   <>
-                    <div className="mb-4 grid gap-2 text-sm sm:grid-cols-3">
+                    <div className="grid gap-2 text-sm sm:grid-cols-2">
                       <div className="rounded-md border border-border px-3 py-2">
-                        <p className="text-muted-foreground">Total meals</p>
-                        <p className="font-medium tabular-nums">{projectedTotalMeals}</p>
+                        <p className="text-muted-foreground">Draft orders saved</p>
+                        <p className="font-medium tabular-nums">{draftSummaries.length}</p>
                       </div>
                       <div className="rounded-md border border-border px-3 py-2">
-                        <p className="text-muted-foreground">4 oz portions</p>
-                        <p className="font-medium tabular-nums">{projected4ozMeals}</p>
-                      </div>
-                      <div className="rounded-md border border-border px-3 py-2">
-                        <p className="text-muted-foreground">6 oz portions</p>
-                        <p className="font-medium tabular-nums">{projected6ozMeals}</p>
+                        <p className="text-muted-foreground">Eligible members</p>
+                        <p className="font-medium tabular-nums">{eligibleCount}</p>
                       </div>
                     </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Member</TableHead>
-                          {showPlanningMembers ? <TableHead>Last ordered</TableHead> : null}
-                          <TableHead>Plan</TableHead>
-                          <TableHead className="text-right">Meals/wk</TableHead>
-                          <TableHead>Portion</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(showPlanningMembers
-                          ? planningMembers
-                          : eligibleMembers.map((member) => ({
-                              ...member,
-                              lastOrderedDate: null as string | null,
-                            }))
-                        ).map((member) => {
-                          const label = member.name?.trim() || member.email;
-                          return (
-                            <TableRow key={member.membershipId}>
-                              <TableCell>
-                                {showPlanningMembers ? (
-                                  <button
-                                    type="button"
-                                    className="text-left font-medium text-primary underline-offset-4 hover:underline"
-                                    onClick={() => openMemberQuickView(member)}
-                                  >
-                                    {label}
-                                  </button>
-                                ) : (
-                                  <div className="font-medium">{label}</div>
-                                )}
-                                {member.name?.trim() ? (
-                                  <div className="text-xs text-muted-foreground">
-                                    {member.email}
-                                  </div>
-                                ) : null}
-                              </TableCell>
-                              {showPlanningMembers ? (
-                                <TableCell className="text-muted-foreground">
-                                  {member.lastOrderedDate
-                                    ? formatDateString(member.lastOrderedDate, "MMM d, yyyy")
-                                    : "Never"}
-                                </TableCell>
-                              ) : null}
-                              <TableCell>{member.planName ?? "—"}</TableCell>
-                              <TableCell className="text-right tabular-nums">
-                                {member.mealsPerWeek}
-                              </TableCell>
-                              <TableCell>{formatPortionLabel(member.portionDefault)}</TableCell>
-                              <TableCell>
-                                <Badge variant="default">Eligible</Badge>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </>
-                )}
-                {unresolvedMembers.length > 0 ? (
-                  <p className="mt-3 text-sm text-destructive">
-                    {unresolvedMembers.length} active membership
-                    {unresolvedMembers.length === 1 ? "" : "s"} missing meals per week:{" "}
-                    {unresolvedMembers
-                      .slice(0, 3)
-                      .map((member) => member.name?.trim() || member.email)
-                      .join(", ")}
-                    {unresolvedMembers.length > 3 ? "…" : ""}
-                  </p>
-                ) : null}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Meals needed this batch</CardTitle>
-                <CardDescription>
-                  {showProjectedDemand
-                    ? "Planning indicator — compares total eligible membership meals to your planned quantities. Per-meal counts are not confirmed customer demand."
-                    : selectedBatch?.status === "selection_open"
-                      ? "Selection is open. B1A creates empty orders only, so per-meal selected demand remains 0 until the picker is built."
-                      : "Actual order-line demand vs planned quantity (after publish)"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {showProjectedDemand ? (
-                  <>
-                    <div className="grid gap-2 text-sm sm:grid-cols-3">
-                      <div className="rounded-md border border-border px-3 py-2">
-                        <p className="text-muted-foreground">Projected demand</p>
-                        <p className="font-medium tabular-nums">{projectedTotalMeals}</p>
-                      </div>
-                      <div className="rounded-md border border-border px-3 py-2">
-                        <p className="text-muted-foreground">Planned</p>
-                        <p className="font-medium tabular-nums">{plannedTotalMeals}</p>
-                      </div>
-                      <div className="rounded-md border border-border px-3 py-2">
-                        <p className="text-muted-foreground">Status</p>
-                        <p className="font-medium">{planningStatusText}</p>
-                      </div>
-                    </div>
-                    {eligibleCount === 0 ? (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        No eligible active members — projected demand is 0 until memberships are
-                        active.
+                    {draftSummaries.length > 0 ? (
+                      <ul className="space-y-1 text-sm">
+                        {draftSummaries.slice(0, 6).map((summary) => (
+                          <li key={summary.orderId} className="flex justify-between gap-4">
+                            <span className="truncate">
+                              {summary.customerName?.trim() || summary.customerEmail}
+                            </span>
+                            <span className="shrink-0 tabular-nums text-muted-foreground">
+                              {summary.mealCount} meal(s)
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No draft orders yet — select a member below to start building.
                       </p>
-                    ) : null}
+                    )}
                   </>
                 ) : mealDemand.filter((r) => r.qtyNeeded > 0 || r.qtyCooked > 0).length === 0 ? (
                   <p className="text-sm text-muted-foreground">
@@ -959,17 +906,169 @@ function AdminBatchesPage() {
                       })}
                   </ul>
                 )}
+                {unresolvedMembers.length > 0 ? (
+                  <p className="text-sm text-destructive">
+                    {unresolvedMembers.length} active membership
+                    {unresolvedMembers.length === 1 ? "" : "s"} missing meals per week.
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Generate orders</CardTitle>
+                <CardDescription>
+                  Validates pricing and membership plans, then creates customer-review orders from
+                  saved drafts and updates batch quantities.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button
+                  onClick={handleGenerateOrders}
+                  disabled={!canGenerateOrders || generatingOrders || loadingInventory}
+                >
+                  {generatingOrders ? "Generating…" : "Generate orders"}
+                </Button>
+                {!canEditBatch ? (
+                  <p className="text-sm text-muted-foreground">
+                    This batch is no longer in planning — orders cannot be generated.
+                  </p>
+                ) : draftSummaries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Save at least one member draft order before generating.
+                  </p>
+                ) : null}
+                {excludedInactiveCount > 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {excludedInactiveCount} paused or cancelled membership
+                    {excludedInactiveCount === 1 ? "" : "s"} excluded.
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
           </div>
 
-          {canEditInventory ? (
+          {canEditBatch ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Build member order</CardTitle>
+                <CardDescription>
+                  Select a member, assign quantities from this batch&apos;s menu, and save to return
+                  later. Drafts are stored as weekly orders until you generate.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                  <div className="space-y-2">
+                    <Label htmlFor="member-select">Member</Label>
+                    <Select
+                      value={selectedMembershipId ?? undefined}
+                      onValueChange={(value) => void handleSelectMember(value)}
+                      disabled={loadingInventory || planningMembers.length === 0}
+                    >
+                      <SelectTrigger id="member-select" className="w-full max-w-md">
+                        <SelectValue placeholder="Choose a member…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {planningMembers.map((member) => (
+                          <SelectItem key={member.membershipId} value={member.membershipId}>
+                            {memberLabel(member)}
+                            {draftMemberIds.has(member.membershipId) ? " · draft saved" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {selectedMember ? (
+                    <div className="text-sm text-muted-foreground">
+                      <p>{selectedMember.planName ?? "No plan"}</p>
+                      <p>
+                        {selectedMember.mealsPerWeek} meals/wk ·{" "}
+                        {formatPortionLabel(selectedMember.portionDefault)}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+
+                {!selectedMember ? (
+                  <p className="text-sm text-muted-foreground">
+                    Choose a member to start building their order.
+                  </p>
+                ) : loadingMemberDraft ? (
+                  <p className="text-sm text-muted-foreground">Loading order draft…</p>
+                ) : catalogRows.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Add batch menu items below before assigning quantities.
+                  </p>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Menu item</TableHead>
+                            <TableHead className="w-[120px] text-right">Unit price</TableHead>
+                            <TableHead className="w-[140px] text-right">Quantity</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(memberDraft?.lines ?? []).map((line) => (
+                            <TableRow key={line.menuItemId}>
+                              <TableCell>{line.menuItemName}</TableCell>
+                              <TableCell className="text-right tabular-nums text-muted-foreground">
+                                {line.unitPriceCents > 0
+                                  ? centsToLabel(line.unitPriceCents)
+                                  : "No price"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={999}
+                                  className="ml-auto w-24 text-right tabular-nums"
+                                  value={orderLineDraft[line.menuItemId] ?? 0}
+                                  onChange={(e) => {
+                                    const qty = Number(e.target.value) || 0;
+                                    setOrderLineDraft((prev) => ({
+                                      ...prev,
+                                      [line.menuItemId]: qty,
+                                    }));
+                                  }}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <Button
+                        onClick={handleSaveMemberDraft}
+                        disabled={savingMemberDraft || loadingMemberDraft}
+                      >
+                        {savingMemberDraft ? "Saving…" : "Save member draft"}
+                      </Button>
+                      <p className="text-sm text-muted-foreground">
+                        {draftMealTotal} meal(s) selected
+                        {selectedMember.mealsPerWeek > 0
+                          ? ` · allowance ${selectedMember.mealsPerWeek}/wk`
+                          : ""}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {canEditBatch ? (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Send to members for selection</CardTitle>
                 <CardDescription>
-                  Creates one empty order per eligible membership so customers can choose meals.
-                  Does not assign line items or charge cards.
+                  Alternative to chef-built orders — creates one empty order per eligible membership
+                  so customers can choose meals themselves.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap items-end gap-4">
@@ -979,7 +1078,6 @@ function AdminBatchesPage() {
                     id="selection-deadline"
                     type="datetime-local"
                     className="w-[260px]"
-                    disabled={!canEditInventory}
                     value={selectionDeadlineLocal}
                     onChange={(e) => setSelectionDeadlineLocal(e.target.value)}
                   />
@@ -991,18 +1089,9 @@ function AdminBatchesPage() {
                   {openingMenu ? "Sending…" : "Send to members for selection"}
                 </Button>
               </CardContent>
-              {!canOpenMenu && canEditInventory && openMenuBlockReasons.length > 0 ? (
+              {!canOpenMenu && openMenuBlockReasons.length > 0 ? (
                 <CardContent className="pt-0">
                   <p className="text-sm text-muted-foreground">{openMenuBlockReasons.join(" ")}</p>
-                </CardContent>
-              ) : null}
-              {unresolvedMembers.length > 0 ? (
-                <CardContent className="pt-0">
-                  <p className="text-sm text-muted-foreground">
-                    {unresolvedMembers.length} membership
-                    {unresolvedMembers.length === 1 ? "" : "s"} without meals per week will be
-                    skipped (selection can still open for eligible members).
-                  </p>
                 </CardContent>
               ) : null}
             </Card>
@@ -1012,98 +1101,65 @@ function AdminBatchesPage() {
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <CardTitle className="text-base">Items in this batch</CardTitle>
+                  <CardTitle className="text-base">Batch menu items</CardTitle>
                   <CardDescription>
-                    Search the catalog (type at least 3 characters) or add a new item. Item editing
-                    locks after selection opens.
+                    Catalog items available for this batch. Item editing locks after selection
+                    opens.
                   </CardDescription>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                {canEditBatch ? (
                   <Button
                     variant="outline"
-                    onClick={handleSaveInventory}
-                    disabled={!canEditInventory || saving || loadingInventory}
+                    onClick={handleSaveCatalog}
+                    disabled={savingCatalog || loadingInventory || catalogMenuItemIds.size === 0}
                   >
-                    {saving ? "Saving…" : "Save planned quantities"}
+                    {savingCatalog ? "Saving…" : "Save menu items"}
                   </Button>
-                </div>
+                ) : null}
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {canEditInventory ? (
+              {canEditBatch ? (
                 <WeeklyMenuPicker
                   menuItems={menuItems}
-                  selectedMenuItemIds={selectedMenuItemIds}
+                  selectedMenuItemIds={catalogMenuItemIds}
                   disabled={loadingInventory}
                   creatingItem={creatingMenuItem}
                   lastBatchAddedByMenuItemId={lastBatchAddedByMenuItemId}
                   onSelect={(menuItemId) =>
-                    setInventoryDraft((prev) => ({
-                      ...prev,
-                      [menuItemId]: (prev[menuItemId] ?? 0) > 0 ? prev[menuItemId]! : 1,
-                    }))
+                    setCatalogMenuItemIds((prev) => new Set(prev).add(menuItemId))
                   }
                   onCreateNewItem={handleCreateNewMenuItem}
                 />
               ) : null}
               {loadingInventory ? (
                 <p className="text-sm text-muted-foreground">Loading batch items…</p>
-              ) : selectedWeeklyMenuRows.length === 0 ? (
+              ) : catalogRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  {canEditInventory
+                  {canEditBatch
                     ? "No items selected yet — search the active menu to build this batch."
-                    : selectedBatch.status === "selection_open"
-                      ? "Selection is open and batch items are locked."
-                      : "No planned items saved for this batch."}
+                    : "No menu items saved for this batch."}
                 </p>
               ) : (
                 <div>
-                  <p className="mb-3 text-sm font-medium">
-                    Selected items ({selectedWeeklyMenuRows.length})
-                  </p>
+                  <p className="mb-3 text-sm font-medium">Selected items ({catalogRows.length})</p>
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Menu item</TableHead>
                         <TableHead>Last in batch</TableHead>
-                        <TableHead className="w-[140px] text-right">Planned quantity</TableHead>
-                        {!hideRemainingColumn ? (
-                          <TableHead className="w-[120px] text-right">Remaining</TableHead>
-                        ) : null}
-                        {canEditInventory ? <TableHead className="w-[56px]" /> : null}
+                        {canEditBatch ? <TableHead className="w-[56px]" /> : null}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedWeeklyMenuRows.map((row) => (
+                      {catalogRows.map((row) => (
                         <TableRow key={row.menuItemId}>
                           <TableCell>{row.menuItemName}</TableCell>
                           <TableCell className="text-muted-foreground">
                             {formatLastBatchAdded(lastBatchAddedByMenuItemId.get(row.menuItemId)) ??
                               "—"}
                           </TableCell>
-                          <TableCell className="text-right">
-                            <Input
-                              type="number"
-                              min={0}
-                              max={999}
-                              className="ml-auto w-24 text-right tabular-nums"
-                              disabled={!canEditInventory}
-                              value={inventoryDraft[row.menuItemId] ?? 0}
-                              onChange={(e) => {
-                                const qty = Number(e.target.value) || 0;
-                                setInventoryDraft((prev) => ({
-                                  ...prev,
-                                  [row.menuItemId]: qty,
-                                }));
-                              }}
-                            />
-                          </TableCell>
-                          {!hideRemainingColumn ? (
-                            <TableCell className="text-right tabular-nums">
-                              {row.qtyRemaining}
-                            </TableCell>
-                          ) : null}
-                          {canEditInventory ? (
+                          {canEditBatch ? (
                             <TableCell className="text-right">
                               <Button
                                 type="button"
@@ -1111,10 +1167,11 @@ function AdminBatchesPage() {
                                 size="icon"
                                 aria-label={`Remove ${row.menuItemName}`}
                                 onClick={() =>
-                                  setInventoryDraft((prev) => ({
-                                    ...prev,
-                                    [row.menuItemId]: 0,
-                                  }))
+                                  setCatalogMenuItemIds((prev) => {
+                                    const next = new Set(prev);
+                                    next.delete(row.menuItemId);
+                                    return next;
+                                  })
                                 }
                               >
                                 <X className="size-4" />
@@ -1185,7 +1242,7 @@ function BatchPlanningMembersSection({
           </TableHeader>
           <TableBody>
             {members.map((member) => {
-              const label = member.name?.trim() || member.email;
+              const label = memberLabel(member);
               return (
                 <TableRow key={member.membershipId}>
                   <TableCell>

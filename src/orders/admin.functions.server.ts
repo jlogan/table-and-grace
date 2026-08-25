@@ -4,16 +4,20 @@ import { z } from "zod";
 import { requireRoleMiddleware } from "@/auth/middleware.server";
 import {
   createWeeklyBatch,
+  generateBatchOrdersFromDrafts,
   getBatchInventory,
+  getBatchMemberDraftOrder,
   getMenuItemsLastBatchAdded,
   listActiveMenuItemsForAdmin,
   listAdminBatches,
+  listBatchDraftOrderSummaries,
   listBatchPlanningMembers,
   listAdminOrders,
   listAdminPickupWindows,
   openMenuForSelection,
   publishWeeklyBatch,
-  saveBatchInventory,
+  saveBatchCatalog,
+  saveBatchMemberDraftOrder,
 } from "@/db/batches.server";
 import {
   createAdminCustomer,
@@ -55,22 +59,26 @@ const createBatchSchema = z.object({
   batchDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pickupDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pickupWindowId: z.string().uuid().optional(),
-  items: z
-    .array(
-      z.object({
-        menuItemId: z.string().uuid(),
-        qtyCooked: z.number().int().min(1).max(999),
-      }),
-    )
-    .min(1),
+  menuItemIds: z.array(z.string().uuid()).min(1),
 });
 
-const saveInventorySchema = z.object({
+const saveBatchCatalogSchema = z.object({
   batchId: z.string().uuid(),
-  items: z.array(
+  menuItemIds: z.array(z.string().uuid()).min(1),
+});
+
+const batchMembershipSchema = z.object({
+  batchId: z.string().uuid(),
+  membershipId: z.string().uuid(),
+});
+
+const saveMemberDraftOrderSchema = z.object({
+  batchId: z.string().uuid(),
+  membershipId: z.string().uuid(),
+  lines: z.array(
     z.object({
       menuItemId: z.string().uuid(),
-      qtyCooked: z.number().int().min(0).max(999),
+      qty: z.number().int().min(0).max(999),
     }),
   ),
 });
@@ -118,13 +126,36 @@ export const createAdminWeeklyBatch = createServerFn({ method: "POST" })
     return { batchId };
   });
 
-export const saveAdminBatchInventory = createServerFn({ method: "POST" })
+export const saveAdminBatchCatalog = createServerFn({ method: "POST" })
   .middleware([requireRoleMiddleware("admin")])
-  .validator(saveInventorySchema)
+  .validator(saveBatchCatalogSchema)
   .handler(async ({ data }) => {
-    await saveBatchInventory(data);
+    await saveBatchCatalog(data);
     return getBatchInventory(data.batchId);
   });
+
+export const fetchBatchDraftOrderSummaries = createServerFn({ method: "GET" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(batchIdSchema)
+  .handler(async ({ data }) => listBatchDraftOrderSummaries(data.batchId));
+
+export const fetchBatchMemberDraftOrder = createServerFn({ method: "GET" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(batchMembershipSchema)
+  .handler(async ({ data }) => getBatchMemberDraftOrder(data.batchId, data.membershipId));
+
+export const saveAdminBatchMemberDraftOrder = createServerFn({ method: "POST" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(saveMemberDraftOrderSchema)
+  .handler(async ({ data }) => {
+    await saveBatchMemberDraftOrder(data);
+    return getBatchMemberDraftOrder(data.batchId, data.membershipId);
+  });
+
+export const generateAdminBatchOrders = createServerFn({ method: "POST" })
+  .middleware([requireRoleMiddleware("admin")])
+  .validator(batchIdSchema)
+  .handler(async ({ data }) => generateBatchOrdersFromDrafts(data.batchId));
 
 export const publishAdminWeeklyBatch = createServerFn({ method: "POST" })
   .middleware([requireRoleMiddleware("admin")])

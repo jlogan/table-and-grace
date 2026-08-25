@@ -246,6 +246,30 @@ export type BatchMealDemandRow = {
   qtyRemaining: number;
 };
 
+export type BatchDraftOrderSummaryRow = {
+  orderId: string;
+  membershipId: string;
+  userId: string;
+  customerName: string | null;
+  customerEmail: string;
+  mealCount: number;
+  lineCount: number;
+};
+
+export type BatchMemberDraftLineRow = {
+  menuItemId: string;
+  menuItemName: string;
+  qty: number;
+  portion: PortionDefault;
+  unitPriceCents: number;
+};
+
+export type BatchMemberDraftOrderRow = {
+  orderId: string | null;
+  membershipId: string;
+  lines: BatchMemberDraftLineRow[];
+};
+
 export type AdminDashboardOverview = {
   currentBatch: AdminBatchSummary | null;
   reviewQueueCount: number;

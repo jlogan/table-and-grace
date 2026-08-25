@@ -1120,7 +1120,7 @@ export async function getBatchMealDemand(batchId: string): Promise<BatchMealDema
     .where(
       and(
         eq(weeklyOrders.batchId, batchId),
-        sql`${weeklyOrders.status} not in ('skipped', 'payment_failed')`,
+        sql`${weeklyOrders.status} not in ('draft', 'skipped', 'payment_failed')`,
       ),
     )
     .groupBy(orderLines.menuItemId);
