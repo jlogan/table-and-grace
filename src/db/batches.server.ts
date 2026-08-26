@@ -11,6 +11,10 @@ import type {
 } from "@/orders/admin-types.ts";
 
 import { toIsoDateString, toIsoDateTimeString } from "@/lib/dates.ts";
+import {
+  sumMemberDraftOrderMeals,
+  validateMemberDraftOrderMeals,
+} from "@/lib/member-draft-validation.ts";
 import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
 import {
   buildSelectionOrderSnapshots,
@@ -1120,12 +1124,7 @@ export async function saveBatchMemberDraftOrder(
     throw new Error("This member already has a finalized order for this batch.");
   }
 
-  if (normalizedLines.length === 0) {
-    if (existingOrder?.id) {
-      await db.delete(weeklyOrders).where(eq(weeklyOrders.id, existingOrder.id));
-    }
-    return;
-  }
+  validateMemberDraftOrderMeals(sumMemberDraftOrderMeals(normalizedLines), member.mealsPerWeek);
 
   const orderId = existingOrder?.id ?? randomUUID();
   const pickupWindowId = member.defaultPickupWindowId ?? batch.pickupWindowId;

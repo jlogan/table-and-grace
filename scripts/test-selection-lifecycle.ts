@@ -15,6 +15,11 @@ import {
   type ActiveMembershipRow,
   type PublishEligibleMember,
 } from "../src/db/batches.server.ts";
+import {
+  getMemberDraftOrderSaveState,
+  sumMemberDraftOrderMeals,
+  validateMemberDraftOrderMeals,
+} from "../src/lib/member-draft-validation.ts";
 import { CUSTOMER_SELECTION_TX_PLAN } from "../src/db/orders.server.ts";
 import { batchStatuses } from "../src/db/schema/weekly-batches.ts";
 import { orderStatuses } from "../src/db/schema/weekly-orders.ts";
@@ -517,6 +522,37 @@ function main() {
       },
     ]).length,
     0,
+  );
+
+  assert.equal(sumMemberDraftOrderMeals([{ qty: 6 }, { qty: 7 }, { qty: 0 }]), 13);
+  assert.doesNotThrow(() => validateMemberDraftOrderMeals(14, 14));
+  assert.doesNotThrow(() => validateMemberDraftOrderMeals(13, 14));
+  assert.throws(
+    () => validateMemberDraftOrderMeals(15, 14),
+    /This order exceeds the member's 14-meal allowance\./,
+  );
+  assert.throws(
+    () => validateMemberDraftOrderMeals(sumMemberDraftOrderMeals([{ qty: 8 }, { qty: 7 }]), 14),
+    /This order exceeds the member's 14-meal allowance\./,
+  );
+  assert.throws(
+    () => validateMemberDraftOrderMeals(0, 14),
+    /Add at least one meal before saving this draft\./,
+  );
+
+  assert.deepEqual(getMemberDraftOrderSaveState({ totalMeals: 13, mealsPerWeek: 14 }), {
+    canSave: true,
+    blockedReason: null,
+  });
+  assert.deepEqual(getMemberDraftOrderSaveState({ totalMeals: 14, mealsPerWeek: 14 }), {
+    canSave: true,
+    blockedReason: null,
+  });
+  assert.equal(getMemberDraftOrderSaveState({ totalMeals: 15, mealsPerWeek: 14 }).canSave, false);
+  assert.equal(getMemberDraftOrderSaveState({ totalMeals: 0, mealsPerWeek: 14 }).canSave, false);
+  assert.match(
+    getMemberDraftOrderSaveState({ totalMeals: 19, mealsPerWeek: 14 }).blockedReason ?? "",
+    /This order exceeds the member's 14-meal allowance\./,
   );
 
   console.log("Selection lifecycle checks passed.");

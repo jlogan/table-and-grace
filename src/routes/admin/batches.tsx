@@ -8,6 +8,7 @@ import { z } from "zod";
 import { requireRoleMiddleware } from "@/auth/middleware.server";
 import { listPublishEligibleMembers, type PublishEligibility } from "@/db/batches.server";
 import { getBatchProjectedMealDemand } from "@/db/customers.server";
+import { getMemberDraftOrderSaveState } from "@/lib/member-draft-validation";
 
 import { MemberOrderItemPicker } from "@/components/admin/member-order-item-picker";
 import { MemberQuickViewPanel } from "@/components/admin/member-quick-view-panel";
@@ -252,9 +253,18 @@ function AdminBatchesPage() {
   const selectedMember =
     planningMembers.find((m) => m.membershipId === selectedMembershipId) ?? null;
   const draftMealTotal = useMemo(
-    () => Object.values(orderLineDraft).reduce((sum, qty) => sum + qty, 0),
+    () => Object.values(orderLineDraft).reduce((sum, qty) => sum + (qty > 0 ? qty : 0), 0),
     [orderLineDraft],
   );
+  const memberDraftSaveState = useMemo(() => {
+    if (!selectedMember) {
+      return { canSave: false, blockedReason: null };
+    }
+    return getMemberDraftOrderSaveState({
+      totalMeals: draftMealTotal,
+      mealsPerWeek: selectedMember.mealsPerWeek,
+    });
+  }, [draftMealTotal, selectedMember]);
   const draftMemberIds = useMemo(
     () => new Set(draftSummaries.map((summary) => summary.membershipId)),
     [draftSummaries],
@@ -1166,19 +1176,30 @@ function AdminBatchesPage() {
                           </div>
                         )}
 
-                        <div className="flex flex-wrap items-center gap-4">
-                          <Button
-                            onClick={handleSaveMemberDraft}
-                            disabled={savingMemberDraft || loadingMemberDraft}
-                          >
-                            {savingMemberDraft ? "Saving…" : "Save member draft"}
-                          </Button>
-                          <p className="text-sm text-muted-foreground">
-                            {draftMealTotal} meal(s) selected
-                            {selectedMember.mealsPerWeek > 0
-                              ? ` · allowance ${selectedMember.mealsPerWeek}/wk`
-                              : ""}
-                          </p>
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-4">
+                            <Button
+                              onClick={handleSaveMemberDraft}
+                              disabled={
+                                savingMemberDraft ||
+                                loadingMemberDraft ||
+                                !memberDraftSaveState.canSave
+                              }
+                            >
+                              {savingMemberDraft ? "Saving…" : "Save member draft"}
+                            </Button>
+                            <p className="text-sm text-muted-foreground">
+                              {draftMealTotal} meal(s) selected
+                              {selectedMember.mealsPerWeek > 0
+                                ? ` · allowance ${selectedMember.mealsPerWeek}/wk`
+                                : ""}
+                            </p>
+                          </div>
+                          {memberDraftSaveState.blockedReason ? (
+                            <p className="text-sm text-destructive">
+                              {memberDraftSaveState.blockedReason}
+                            </p>
+                          ) : null}
                         </div>
                       </>
                     )}
