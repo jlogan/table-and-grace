@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 
 import type { AdminMenuItemRow, AdminPlanCategoryWithId } from "@/orders/admin-types.ts";
 
@@ -121,6 +121,15 @@ export async function createAdminMenuItem(input: CreateAdminMenuItemInput): Prom
   const name = input.name.trim();
   if (!name) {
     throw new Error("Item name is required.");
+  }
+
+  const [exactExisting] = await db
+    .select({ id: menuItems.id })
+    .from(menuItems)
+    .where(sql`lower(trim(${menuItems.name})) = ${name.toLowerCase()}`)
+    .limit(1);
+  if (exactExisting) {
+    return exactExisting.id;
   }
 
   const baseSlug = slugifyName(name);

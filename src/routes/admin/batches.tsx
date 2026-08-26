@@ -367,6 +367,45 @@ function AdminBatchesPage() {
   }
 
   async function handleCreateMenuItemFromDialog(data: MenuItemCreateInput) {
+    const trimmed = data.name.trim();
+    if (!trimmed) return;
+
+    const existing = menuItems.find(
+      (item) => item.name.trim().toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (existing) {
+      if (menuItemDialogTarget === "catalog" || mode === "create") {
+        if (mode === "create") {
+          setCreateSelectedMenuItemIds((prev) => new Set(prev).add(existing.id));
+        } else {
+          setCatalogMenuItemIds((prev) => new Set(prev).add(existing.id));
+        }
+      }
+
+      if (menuItemDialogTarget === "member-order" && selectedBatchId && selectedMembershipId) {
+        setCreatingMenuItem(true);
+        setError(null);
+        try {
+          setCatalogMenuItemIds((prev) => new Set(prev).add(existing.id));
+          await persistCatalogIfNeeded([existing.id]);
+          await loadMemberDraft(selectedBatchId, selectedMembershipId);
+          setOrderLineDraft((prev) => ({
+            ...prev,
+            [existing.id]: Math.max(1, prev[existing.id] ?? 0),
+          }));
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Could not add item to order.");
+          return;
+        } finally {
+          setCreatingMenuItem(false);
+        }
+      }
+
+      setMenuItemDialogOpen(false);
+      setMenuItemDialogTarget(null);
+      return;
+    }
+
     setCreatingMenuItem(true);
     setError(null);
     try {
@@ -398,45 +437,6 @@ function AdminBatchesPage() {
 
       setMenuItemDialogOpen(false);
       setMenuItemDialogTarget(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not create menu item.");
-    } finally {
-      setCreatingMenuItem(false);
-    }
-  }
-
-  async function handleCreateNewMenuItem(name: string) {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-
-    const existing = menuItems.find(
-      (item) => item.name.trim().toLowerCase() === trimmed.toLowerCase(),
-    );
-    if (existing) {
-      if (mode === "create") {
-        setCreateSelectedMenuItemIds((prev) => new Set(prev).add(existing.id));
-      } else {
-        setCatalogMenuItemIds((prev) => new Set(prev).add(existing.id));
-      }
-      return;
-    }
-
-    if (mode === "detail" && canEditBatch) {
-      openMenuItemCreateDialog(trimmed, "catalog");
-      return;
-    }
-
-    setCreatingMenuItem(true);
-    setError(null);
-    try {
-      const result = await createMenuItemFn({ data: { name: trimmed } });
-      const newItem: AdminMenuItemOption = { id: result.id, name: trimmed, note: null };
-      setMenuItems((prev) => [...prev, newItem].sort((a, b) => a.name.localeCompare(b.name)));
-      if (mode === "create") {
-        setCreateSelectedMenuItemIds((prev) => new Set(prev).add(result.id));
-      } else {
-        setCatalogMenuItemIds((prev) => new Set(prev).add(result.id));
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create menu item.");
     } finally {
@@ -808,7 +808,7 @@ function AdminBatchesPage() {
                 onSelect={(menuItemId) =>
                   setCreateSelectedMenuItemIds((prev) => new Set(prev).add(menuItemId))
                 }
-                onCreateNewItem={handleCreateNewMenuItem}
+                onRequestCreateNew={(name) => openMenuItemCreateDialog(name, "catalog")}
               />
               {createSelectedRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
@@ -1354,7 +1354,7 @@ function AdminBatchesPage() {
                   onSelect={(menuItemId) =>
                     setCatalogMenuItemIds((prev) => new Set(prev).add(menuItemId))
                   }
-                  onCreateNewItem={handleCreateNewMenuItem}
+                  onRequestCreateNew={(name) => openMenuItemCreateDialog(name, "catalog")}
                 />
               ) : null}
               {loadingInventory ? (

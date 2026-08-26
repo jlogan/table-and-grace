@@ -22,7 +22,7 @@ type WeeklyMenuPickerProps = {
   creatingItem?: boolean;
   lastBatchAddedByMenuItemId?: Map<string, string | null>;
   onSelect: (menuItemId: string) => void;
-  onCreateNewItem?: (name: string) => Promise<void>;
+  onRequestCreateNew?: (name: string) => void;
 };
 
 export function WeeklyMenuPicker({
@@ -32,7 +32,7 @@ export function WeeklyMenuPicker({
   creatingItem,
   lastBatchAddedByMenuItemId,
   onSelect,
-  onCreateNewItem,
+  onRequestCreateNew,
 }: WeeklyMenuPickerProps) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -61,11 +61,11 @@ export function WeeklyMenuPicker({
   }, [canSearch, menuItems, trimmedQuery]);
 
   const showAddNew =
-    canSearch && !hasExactMatch && Boolean(onCreateNewItem) && trimmedQuery.length > 0;
+    canSearch && !hasExactMatch && Boolean(onRequestCreateNew) && trimmedQuery.length > 0;
 
-  async function handleCreateNew() {
-    if (!onCreateNewItem || !trimmedQuery) return;
-    await onCreateNewItem(trimmedQuery);
+  function handleRequestCreateNew() {
+    if (!onRequestCreateNew || !trimmedQuery) return;
+    onRequestCreateNew(trimmedQuery);
     setQuery("");
     setOpen(false);
   }
@@ -141,12 +141,7 @@ export function WeeklyMenuPicker({
               ) : null}
               {showAddNew ? (
                 <CommandGroup>
-                  <CommandItem
-                    value={`add-new-${trimmedQuery}`}
-                    onSelect={() => {
-                      void handleCreateNew();
-                    }}
-                  >
+                  <CommandItem value={`add-new-${trimmedQuery}`} onSelect={handleRequestCreateNew}>
                     <span className="font-medium">Add New Item: {trimmedQuery}</span>
                   </CommandItem>
                 </CommandGroup>
