@@ -131,6 +131,12 @@ export function hasStripeEnv(): boolean {
   return Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET && env.STRIPE_PUBLISHABLE_KEY);
 }
 
+/** True when server-side Stripe API calls can run. */
+export function hasStripeApiEnv(): boolean {
+  const env = readRawEnv();
+  return Boolean(env.STRIPE_SECRET_KEY);
+}
+
 /** Format validation errors for CLI output. */
 export function formatServerEnvErrors(): string | null {
   const result = serverEnvSchema.safeParse(readRawEnv());

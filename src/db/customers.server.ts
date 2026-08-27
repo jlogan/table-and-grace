@@ -38,6 +38,7 @@ import { weeklyOrders } from "./schema/weekly-orders.ts";
 import { resolveOrderPaymentSchedule } from "@/orders/payment-schedule.ts";
 import { resolveOrderPlanName, resolveOrderPlanSlug } from "@/orders/order-snapshots.ts";
 import type { DietaryPreferenceSlug, FoodAllergenSlug } from "@/lib/food-profile.ts";
+import { syncAppCustomerToStripe } from "@/stripe/push-customer.server.ts";
 
 const PLAN_TAG_PREFIX = "plan:";
 const MEALS_TAG_PREFIX = "meals:";
@@ -678,6 +679,8 @@ export async function createAdminCustomer(input: CreateAdminCustomerInput): Prom
     });
   }
 
+  await syncAppCustomerToStripe(userId);
+
   return userId;
 }
 
@@ -914,6 +917,8 @@ export async function updateAdminCustomer(input: UpdateAdminCustomerInput): Prom
       });
     }
   }
+
+  await syncAppCustomerToStripe(input.userId);
 }
 
 export type CreateAdminMembershipInput = {

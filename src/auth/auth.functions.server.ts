@@ -19,6 +19,7 @@ import {
 } from "./session.server";
 import type { CurrentUser } from "./types";
 import { getCurrentUser } from "./user.server";
+import { syncAppCustomerToStripe } from "@/stripe/push-customer.server.ts";
 
 const emailSchema = z.string().trim().email().max(255);
 const passwordSchema = z.string().min(8, "Password must be at least 8 characters").max(128);
@@ -69,6 +70,8 @@ export const signupWithPassword = createServerFn({ method: "POST" })
     });
 
     await db.insert(customerProfiles).values({ userId });
+
+    await syncAppCustomerToStripe(userId);
 
     await revokeAllSessionsForUser(userId);
     const token = await createSession(userId);

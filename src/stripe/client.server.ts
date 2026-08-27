@@ -1,15 +1,20 @@
 import Stripe from "stripe";
 
-import { getServerEnv, hasStripeEnv } from "@/env.server.ts";
+import { getServerEnv, hasStripeApiEnv, hasStripeEnv } from "@/env.server.ts";
 
 /** API version supported by the pinned Stripe SDK in this repo. */
 export const STRIPE_API_VERSION = "2026-02-25.clover" as const;
 
 let cachedStripeClient: Stripe | undefined;
 
-/** True when all Stripe env vars required for billing are configured. */
+/** True when all Stripe env vars required for billing/webhooks/client flows are configured. */
 export function isStripeConfigured(): boolean {
   return hasStripeEnv();
+}
+
+/** True when server-side Stripe API calls can run. */
+export function isStripeApiConfigured(): boolean {
+  return hasStripeApiEnv();
 }
 
 /** Stripe env vars or throw — use before server-side Stripe API calls. */
@@ -18,6 +23,14 @@ export function requireStripeEnv() {
     throw new Error(
       "Stripe is not configured. Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and STRIPE_PUBLISHABLE_KEY.",
     );
+  }
+  return getServerEnv();
+}
+
+/** Secret key or throw — use for server-side Stripe API calls that do not need webhooks/client key. */
+export function requireStripeApiEnv() {
+  if (!hasStripeApiEnv()) {
+    throw new Error("Stripe API is not configured. Set STRIPE_SECRET_KEY.");
   }
   return getServerEnv();
 }
@@ -37,7 +50,7 @@ export function getStripeWebhookSecret(): string {
 /** Lazily initialized Stripe SDK client (server-only). */
 export function getStripeClient(): Stripe {
   if (!cachedStripeClient) {
-    const env = requireStripeEnv();
+    const env = requireStripeApiEnv();
     cachedStripeClient = new Stripe(env.STRIPE_SECRET_KEY!, {
       apiVersion: STRIPE_API_VERSION,
       typescript: true,
