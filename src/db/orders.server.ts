@@ -99,7 +99,10 @@ export function getOrderEditState(
     return {
       canEdit: false,
       canApprove: false,
-      editBlockedReason: "This order is no longer open for review.",
+      editBlockedReason:
+        orderStatus === "finalized"
+          ? "This order was prepared by the kitchen and cannot be changed."
+          : "This order is no longer open for review.",
     };
   }
 

@@ -85,6 +85,7 @@ function OrderReviewPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const paymentSchedule = review.order.paymentScheduleSnapshot ?? review.paymentSchedule;
+  const isChefFinalized = review.order.status === "finalized";
   const isDirty = useMemo(() => {
     const subs = drafts.filter(
       (d) => d.substituteMenuItemId && d.substituteMenuItemId !== lineMenuItemId(review, d.lineId),
@@ -191,7 +192,9 @@ function OrderReviewPage() {
     <MemberLayout showBack backTo="/account" backLabel="Account">
       <header className="mb-6">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">Weekly order review</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {isChefFinalized ? "Weekly order" : "Weekly order review"}
+          </h1>
           <Badge variant={review.canEdit ? "default" : "secondary"}>
             {formatOrderStatus(review.order.status)}
           </Badge>
@@ -234,7 +237,7 @@ function OrderReviewPage() {
             <span className="text-muted-foreground">Payment schedule: </span>
             {formatPaymentSchedule(paymentSchedule)}
           </p>
-          {review.batch.reviewDeadline ? (
+          {review.batch.reviewDeadline && !isChefFinalized ? (
             <p>
               <span className="text-muted-foreground">Review by: </span>
               {format(parseISO(review.batch.reviewDeadline), "EEE, MMM d · h:mm a")}
@@ -448,16 +451,23 @@ function OrderReviewPage() {
             </span>
           </div>
         </CardContent>
-        {paymentSchedule === "manual_per_order" ? (
+        {review.canEdit ? (
+          paymentSchedule === "manual_per_order" ? (
+            <CardContent className="pt-0 text-sm text-muted-foreground">
+              You&apos;ll confirm payment when approving (Stripe checkout coming soon).
+            </CardContent>
+          ) : (
+            <CardContent className="pt-0 text-sm text-muted-foreground">
+              Charged automatically per your {formatPaymentSchedule(paymentSchedule).toLowerCase()}{" "}
+              schedule after approval.
+            </CardContent>
+          )
+        ) : isChefFinalized ? (
           <CardContent className="pt-0 text-sm text-muted-foreground">
-            You&apos;ll confirm payment when approving (Stripe checkout coming soon).
+            Prepared by the kitchen. Payment is handled per your{" "}
+            {formatPaymentSchedule(paymentSchedule).toLowerCase()} schedule.
           </CardContent>
-        ) : (
-          <CardContent className="pt-0 text-sm text-muted-foreground">
-            Charged automatically per your {formatPaymentSchedule(paymentSchedule).toLowerCase()}{" "}
-            schedule after approval.
-          </CardContent>
-        )}
+        ) : null}
       </Card>
 
       {error ? (

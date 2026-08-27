@@ -12,6 +12,7 @@ import {
 import { billingCycles } from "./billing-cycles.ts";
 import { portionDefaults } from "./customer-profiles.ts";
 import { memberships } from "./memberships.ts";
+import { paymentMethods } from "./payment-methods.ts";
 import { paymentSchedules } from "./payment-schedules.ts";
 import { pickupWindows } from "./pickup-windows.ts";
 import { users } from "./users.ts";
@@ -22,6 +23,8 @@ export const orderStatuses = [
   "awaiting_selection",
   "selection_in_progress",
   "selection_submitted",
+  /** Chef-built orders after admin generates from saved drafts — read-only for customers. */
+  "finalized",
   "pending_customer_review",
   "changes_requested",
   "approved",
@@ -63,6 +66,11 @@ export const weeklyOrders = mysqlTable(
     billingCycleId: varchar("billing_cycle_id", { length: 36 }).references(() => billingCycles.id, {
       onDelete: "set null",
     }),
+    /** Overrides membership default for this order's invoice/charge. */
+    paymentMethodId: varchar("payment_method_id", { length: 36 }).references(
+      () => paymentMethods.id,
+      { onDelete: "set null" },
+    ),
     subtotalCents: int("subtotal_cents").notNull().default(0),
     taxCents: int("tax_cents").notNull().default(0),
     /** Gratuity from POS receipt; excluded from subtotal/tax, included in totalCents. */
@@ -87,6 +95,7 @@ export const weeklyOrders = mysqlTable(
     index("weekly_orders_batch_id_idx").on(table.batchId),
     index("weekly_orders_user_id_idx").on(table.userId),
     index("weekly_orders_membership_id_idx").on(table.membershipId),
+    index("weekly_orders_payment_method_id_idx").on(table.paymentMethodId),
   ],
 );
 

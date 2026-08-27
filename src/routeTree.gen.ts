@@ -40,6 +40,7 @@ import { Route as AccountOrdersOrderIdRouteImport } from './routes/account.order
 import { Route as AdminCustomersIndexRouteImport } from './routes/admin/customers.index'
 import { Route as AdminCustomersCustomerIdRouteImport } from './routes/admin/customers.$customerId'
 import { Route as AdminCustomersNewRouteImport } from './routes/admin/customers.new'
+import { Route as ApiStripeWebhookRouteImport } from './routes/api/stripe/webhook'
 import { Route as AccountOrdersOrderIdSelectRouteImport } from './routes/account.orders.$orderId.select'
 
 const IndexRoute = IndexRouteImport.update({
@@ -198,6 +199,11 @@ const AdminCustomersNewRoute = AdminCustomersNewRouteImport.update({
   path: '/new',
   getParentRoute: () => AdminCustomersRoute,
 } as any)
+const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
+  id: '/api/stripe/webhook',
+  path: '/api/stripe/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AccountOrdersOrderIdSelectRoute =
   AccountOrdersOrderIdSelectRouteImport.update({
     id: '/select',
@@ -236,6 +242,7 @@ export interface FileRoutesByFullPath {
   '/account/orders/$orderId': typeof AccountOrdersOrderIdRouteWithChildren
   '/admin/customers/$customerId': typeof AdminCustomersCustomerIdRoute
   '/admin/customers/new': typeof AdminCustomersNewRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/admin/customers/': typeof AdminCustomersIndexRoute
   '/account/orders/$orderId/select': typeof AccountOrdersOrderIdSelectRoute
 }
@@ -268,6 +275,7 @@ export interface FileRoutesByTo {
   '/account/orders/$orderId': typeof AccountOrdersOrderIdRouteWithChildren
   '/admin/customers/$customerId': typeof AdminCustomersCustomerIdRoute
   '/admin/customers/new': typeof AdminCustomersNewRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/admin/customers': typeof AdminCustomersIndexRoute
   '/account/orders/$orderId/select': typeof AccountOrdersOrderIdSelectRoute
 }
@@ -303,6 +311,7 @@ export interface FileRoutesById {
   '/account/orders/$orderId': typeof AccountOrdersOrderIdRouteWithChildren
   '/admin/customers/$customerId': typeof AdminCustomersCustomerIdRoute
   '/admin/customers/new': typeof AdminCustomersNewRoute
+  '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/admin/customers/': typeof AdminCustomersIndexRoute
   '/account/orders/$orderId/select': typeof AccountOrdersOrderIdSelectRoute
 }
@@ -339,6 +348,7 @@ export interface FileRouteTypes {
     | '/account/orders/$orderId'
     | '/admin/customers/$customerId'
     | '/admin/customers/new'
+    | '/api/stripe/webhook'
     | '/admin/customers/'
     | '/account/orders/$orderId/select'
   fileRoutesByTo: FileRoutesByTo
@@ -371,6 +381,7 @@ export interface FileRouteTypes {
     | '/account/orders/$orderId'
     | '/admin/customers/$customerId'
     | '/admin/customers/new'
+    | '/api/stripe/webhook'
     | '/admin/customers'
     | '/account/orders/$orderId/select'
   id:
@@ -405,6 +416,7 @@ export interface FileRouteTypes {
     | '/account/orders/$orderId'
     | '/admin/customers/$customerId'
     | '/admin/customers/new'
+    | '/api/stripe/webhook'
     | '/admin/customers/'
     | '/account/orders/$orderId/select'
   fileRoutesById: FileRoutesById
@@ -428,6 +440,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiHealthRoute: typeof ApiHealthRoute
   FeedbackOrderIdRoute: typeof FeedbackOrderIdRoute
+  ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -649,6 +662,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCustomersNewRouteImport
       parentRoute: typeof AdminCustomersRoute
     }
+    '/api/stripe/webhook': {
+      id: '/api/stripe/webhook'
+      path: '/api/stripe/webhook'
+      fullPath: '/api/stripe/webhook'
+      preLoaderRoute: typeof ApiStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/account/orders/$orderId/select': {
       id: '/account/orders/$orderId/select'
       path: '/select'
@@ -752,6 +772,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiHealthRoute: ApiHealthRoute,
   FeedbackOrderIdRoute: FeedbackOrderIdRoute,
+  ApiStripeWebhookRoute: ApiStripeWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

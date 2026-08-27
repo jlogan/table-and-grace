@@ -55,6 +55,11 @@ export const customerProfiles = mysqlTable("customer_profiles", {
     () => pickupWindows.id,
     { onDelete: "set null" },
   ),
+  /** App-editable metadata mirrored to Stripe Customer.metadata (no env/site routing keys). */
+  stripeCustomerMetadata: json("stripe_customer_metadata").$type<Record<string, string>>(),
+  stripeCustomerMetadataUpdatedAt: timestamp("stripe_customer_metadata_updated_at"),
+  stripeCustomerSyncedAt: timestamp("stripe_customer_synced_at"),
+  stripeCustomerSyncError: text("stripe_customer_sync_error"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });

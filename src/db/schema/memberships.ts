@@ -1,6 +1,7 @@
 import { int, mysqlEnum, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 import { portionDefaults } from "./customer-profiles.ts";
+import { paymentMethods } from "./payment-methods.ts";
 import { paymentSchedules } from "./payment-schedules.ts";
 import { users } from "./users.ts";
 
@@ -36,6 +37,11 @@ export const memberships = mysqlTable("memberships", {
   monthlyInvoiceDay: int("monthly_invoice_day"),
   /** Future biweekly/manual anchor date for billing schedule planning. */
   biweeklyAnchorDate: timestamp("biweekly_anchor_date"),
+  /** Saved card used for this membership/meal plan (overrides account default). */
+  defaultPaymentMethodId: varchar("default_payment_method_id", { length: 36 }).references(
+    () => paymentMethods.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });

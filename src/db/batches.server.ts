@@ -1203,7 +1203,10 @@ async function syncBatchInventoryFromOrders(
   }
 }
 
-/** Finalize draft orders: validate pricing/plans, promote to customer review, sync batch inventory. */
+/** Chef-built orders land in finalized (read-only for customers); selection/review flows unchanged. */
+export const CHEF_BUILT_FINAL_ORDER_STATUS = "finalized" as const;
+
+/** Finalize draft orders: validate pricing/plans, promote to finalized, sync batch inventory. */
 export async function generateBatchOrdersFromDrafts(
   batchId: string,
 ): Promise<{ ordersGenerated: number }> {
@@ -1307,7 +1310,8 @@ export async function generateBatchOrdersFromDrafts(
       await tx
         .update(weeklyOrders)
         .set({
-          status: "pending_customer_review",
+          status: CHEF_BUILT_FINAL_ORDER_STATUS,
+          chargeDueAt: batch.chargeScheduledAt ?? batch.reviewDeadline ?? new Date(),
           ...snapshots,
         })
         .where(eq(weeklyOrders.id, draft.orderId));
@@ -1315,6 +1319,7 @@ export async function generateBatchOrdersFromDrafts(
     }
 
     await syncBatchInventoryFromOrders(batchId, tx);
+    await tx.update(weeklyBatches).set({ status: "approved" }).where(eq(weeklyBatches.id, batchId));
   });
 
   return { ordersGenerated: draftsWithLines.length };

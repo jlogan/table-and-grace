@@ -113,6 +113,7 @@ export function formatOrderStatus(status: OrderStatus): string {
     awaiting_selection: "Awaiting selection",
     selection_in_progress: "Selection in progress",
     selection_submitted: "Selection submitted",
+    finalized: "Finalized",
     pending_customer_review: "Review needed",
     changes_requested: "Changes pending",
     approved: "Approved",
@@ -159,6 +160,8 @@ export function orderStatusBadgeVariant(
     return "outline";
   }
   if (status === "payment_failed") return "destructive";
-  if (status === "approved" || status === "ready_for_pickup") return "secondary";
+  if (status === "finalized" || status === "approved" || status === "ready_for_pickup") {
+    return "secondary";
+  }
   return "outline";
 }

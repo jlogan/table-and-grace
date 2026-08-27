@@ -2,6 +2,7 @@ import { batchItems } from "./batch-items.ts";
 import { billingCycles } from "./billing-cycles.ts";
 import { charges } from "./charges.ts";
 import { customerProfiles } from "./customer-profiles.ts";
+import { invoiceLines, invoices } from "./invoices.ts";
 import { jobs } from "./jobs.ts";
 import { magicLinks } from "./magic-links.ts";
 import { memberships } from "./memberships.ts";
@@ -15,6 +16,7 @@ import { pickupWindows } from "./pickup-windows.ts";
 import { planCategories } from "./plan-categories.ts";
 import { sessions } from "./sessions.ts";
 import { stripeEvents } from "./stripe-events.ts";
+import { stripePrices, stripeProducts } from "./stripe-catalog.ts";
 import { users } from "./users.ts";
 import { weeklyBatches } from "./weekly-batches.ts";
 import { weeklyOrders } from "./weekly-orders.ts";
@@ -25,6 +27,8 @@ export const drizzleSchema = {
   billingCycles,
   charges,
   customerProfiles,
+  invoiceLines,
+  invoices,
   jobs,
   magicLinks,
   memberships,
@@ -38,6 +42,8 @@ export const drizzleSchema = {
   planCategories,
   sessions,
   stripeEvents,
+  stripePrices,
+  stripeProducts,
   users,
   weeklyBatches,
   weeklyOrders,

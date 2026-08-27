@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 
 import {
+  CHEF_BUILT_FINAL_ORDER_STATUS,
   classifyActiveMembershipRows,
   OPEN_MENU_FOR_SELECTION_TX_PLAN,
   planOpenMenuOrderCreates,
@@ -20,7 +21,7 @@ import {
   sumMemberDraftOrderMeals,
   validateMemberDraftOrderMeals,
 } from "../src/lib/member-draft-validation.ts";
-import { CUSTOMER_SELECTION_TX_PLAN } from "../src/db/orders.server.ts";
+import { CUSTOMER_SELECTION_TX_PLAN, getOrderEditState } from "../src/db/orders.server.ts";
 import { batchStatuses } from "../src/db/schema/weekly-batches.ts";
 import { orderStatuses } from "../src/db/schema/weekly-orders.ts";
 import { formatBatchStatus, isMembershipBatchEligible } from "../src/orders/admin-types.ts";
@@ -103,7 +104,39 @@ function main() {
     assert.notEqual(label, status, `missing order label for ${status}`);
   }
   assert.equal(formatOrderStatus("pending_customer_review"), "Review needed");
+  assert.equal(formatOrderStatus("finalized"), "Finalized");
   assert.equal(formatOrderStatus("awaiting_selection"), "Awaiting selection");
+
+  assert.equal(CHEF_BUILT_FINAL_ORDER_STATUS, "finalized");
+  assert.deepEqual(getOrderEditState("finalized", null), {
+    canEdit: false,
+    canApprove: false,
+    editBlockedReason: "This order was prepared by the kitchen and cannot be changed.",
+  });
+  assert.equal(getOrderEditState("pending_customer_review", null).canEdit, true);
+  assert.equal(getOrderEditState("pending_customer_review", null).canApprove, true);
+
+  const kitchenPrepExcluded = new Set(["draft", "skipped", "payment_failed"]);
+  assert.equal(kitchenPrepExcluded.has(CHEF_BUILT_FINAL_ORDER_STATUS), false);
+  assert.ok(orderStatuses.includes(CHEF_BUILT_FINAL_ORDER_STATUS));
+
+  const manualChefSnapshots = buildSelectionOrderSnapshots(
+    eligibleMember({
+      membershipId: "m-manual",
+      userId: "u-manual",
+      membershipPaymentSchedule: "manual_per_order",
+      profilePaymentSchedule: "weekly_autopay",
+    }),
+  );
+  assert.equal(manualChefSnapshots.paymentScheduleSnapshot, "manual_per_order");
+  assert.equal(
+    resolveOrderPaymentSchedule({
+      paymentScheduleSnapshot: manualChefSnapshots.paymentScheduleSnapshot,
+      membershipPaymentSchedule: "weekly_autopay",
+      profilePaymentSchedule: "weekly_autopay",
+    }),
+    "manual_per_order",
+  );
 
   // Selection deadline: required, valid, and must be in the future (review_deadline untouched server-side).
   const now = new Date("2026-08-24T12:00:00.000Z");

@@ -692,7 +692,7 @@ function AdminBatchesPage() {
       if (selectedMembershipId) {
         await loadMemberDraft(selectedBatchId, selectedMembershipId);
       }
-      setMessage(`Generated ${result.ordersGenerated} order(s) for customer review.`);
+      setMessage(`Generated ${result.ordersGenerated} finalized order(s).`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not generate orders.");
     } finally {
