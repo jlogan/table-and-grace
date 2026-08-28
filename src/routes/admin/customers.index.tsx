@@ -157,16 +157,26 @@ function AdminCustomersPage() {
 }
 
 function CustomerIndexRow({ customer }: { customer: AdminCustomerRow }) {
+  const navigate = Route.useNavigate();
   const label = customerDisplayLabel(customer);
   const preferred = customerPreferredName(customer);
 
   return (
-    <TableRow>
+    <TableRow
+      className="cursor-pointer hover:bg-muted/50"
+      onClick={() =>
+        navigate({
+          to: "/admin/customers/$customerId",
+          params: { customerId: customer.userId },
+        })
+      }
+    >
       <TableCell>
         <Link
           to="/admin/customers/$customerId"
           params={{ customerId: customer.userId }}
           className="font-medium text-primary underline-offset-4 hover:underline"
+          onClick={(e) => e.stopPropagation()}
         >
           {label}
         </Link>

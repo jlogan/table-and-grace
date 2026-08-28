@@ -18,6 +18,7 @@ const MIN_SEARCH_LENGTH = 3;
 type MemberOrderItemPickerProps = {
   menuItems: AdminMenuItemOption[];
   disabled?: boolean;
+  emptyMessage?: string;
   lastBatchAddedByMenuItemId?: Map<string, string | null>;
   onSelect: (menuItemId: string) => void;
   onRequestCreateNew?: (name: string) => void;
@@ -26,6 +27,7 @@ type MemberOrderItemPickerProps = {
 export function MemberOrderItemPicker({
   menuItems,
   disabled,
+  emptyMessage = "Add and save batch menu items in the section below before building member orders.",
   lastBatchAddedByMenuItemId,
   onSelect,
   onRequestCreateNew,
@@ -67,11 +69,20 @@ export function MemberOrderItemPicker({
     setOpen(false);
   }
 
+  if (menuItems.length === 0) {
+    return (
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Add items to order</p>
+        <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1">
       <p className="text-sm font-medium">Add items to order</p>
       <p className="text-sm text-muted-foreground">
-        Search the catalog (min. 3 characters) or add a new menu item with full details.
+        Search this batch&apos;s menu items (min. 3 characters).
       </p>
       <div className="relative w-full max-w-md">
         <div className="relative">
